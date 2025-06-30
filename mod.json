@@ -1,0 +1,11 @@
+{
+  "name": "Arc-Max-Clone",
+  "description": "Brings Arc Max AI features to Zen via OpenRouter",
+  "version": "0.1.0",
+  "authors": ["Trevor Rosato"],
+  "homepage": "https://trevorsprojects.com",
+  "scripts": ["main.js"],
+  "styles": ["style.css"],
+  "preferences": "preferences.json",
+  "manifest_version": 1
+} 

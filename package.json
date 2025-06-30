@@ -1,0 +1,28 @@
+{
+  "name": "arc-max-clone",
+  "version": "0.1.0",
+  "description": "Brings Arc Max AI features to Zen Browser via OpenRouter",
+  "main": "main.js",
+  "scripts": {
+    "build": "zip -r arc-max-clone-v0.1.0.zip mod.json preferences.json main.js style.css -x '*.git*' '*.DS_Store*'",
+    "dev": "echo 'Import the folder directly in Zen for development'",
+    "clean": "rm -f *.zip"
+  },
+  "keywords": [
+    "zen-browser",
+    "arc-max",
+    "ai",
+    "browser-extension",
+    "openrouter"
+  ],
+  "author": "Trevor Rosato",
+  "license": "MIT",
+  "homepage": "https://github.com/trevorrosato/arc-max-clone",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/trevorrosato/arc-max-clone.git"
+  },
+  "bugs": {
+    "url": "https://github.com/trevorrosato/arc-max-clone/issues"
+  }
+} 

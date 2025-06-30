@@ -1,0 +1,45 @@
+[
+  {
+    "property": "openrouter_api_key",
+    "label": "OpenRouter API Key",
+    "type": "password",
+    "placeholder": "sk-...",
+    "defaultValue": ""
+  },
+  {
+    "property": "model",
+    "label": "Model (slug)",
+    "type": "text",
+    "defaultValue": "openai/gpt-4o"
+  },
+  {
+    "property": "enable_ask_on_page",
+    "label": "Enable Ask on Page (Cmd/Ctrl+F)",
+    "type": "boolean",
+    "defaultValue": true
+  },
+  {
+    "property": "enable_link_previews",
+    "label": "Enable Link Previews (Shift+Hover)",
+    "type": "boolean",
+    "defaultValue": true
+  },
+  {
+    "property": "enable_tidy_tabs",
+    "label": "Enable Tidy Tab Titles",
+    "type": "boolean",
+    "defaultValue": true
+  },
+  {
+    "property": "enable_tidy_downloads",
+    "label": "Enable Tidy Downloads",
+    "type": "boolean",
+    "defaultValue": true
+  },
+  {
+    "property": "enable_instant_links",
+    "label": "Enable Instant Links (Shift+Enter)",
+    "type": "boolean",
+    "defaultValue": true
+  }
+] 
