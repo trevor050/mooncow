@@ -1,9 +1,9 @@
-# 🌙 Arc Max Clone for Zen Browser
+# 🌙 Mooncow for Zen Browser
 
 > **Bring Arc's AI superpowers to Zen Browser**  
 > All the goodness of Arc Max, but open source and powered by your choice of AI models through OpenRouter.
 
-![Arc Max Clone Demo](https://via.placeholder.com/800x400/1a1a1a/ffffff?text=Arc+Max+Clone+Demo)
+![Mooncow Demo](https://via.placeholder.com/800x400/1a1a1a/ffffff?text=Mooncow+Demo)
 
 ## 🚀 What's This?
 
@@ -23,9 +23,9 @@ Tired of Arc hogging all the AI browser features? This Zen mod gives you everyth
 2. Pick your model (GPT-4o, Claude, Llama - whatever floats your boat)
 
 ### 2. Install in Zen
-1. Download the [latest release](https://github.com/trevorrosato/arc-max-clone/releases) 
+1. Download the [latest release](https://github.com/trevorrosato/mooncow/releases) 
 2. Open Zen → Preferences → Mods → Import
-3. Select the `arc-max-clone.zip` file
+3. Select the `mooncow-v0.1.0.zip` file
 4. Add your OpenRouter API key in the mod settings
 
 ### 3. Start Using
@@ -39,8 +39,8 @@ Tired of Arc hogging all the AI browser features? This Zen mod gives you everyth
 Want to hack on this? Easy:
 
 ```bash
-git clone https://github.com/trevorrosato/arc-max-clone.git
-cd arc-max-clone
+git clone https://github.com/trevorrosato/mooncow.git
+cd mooncow
 
 # Edit the files directly, then import the folder in Zen
 # Zen's developer mode lets you reload without restarting

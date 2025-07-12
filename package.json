@@ -1,10 +1,10 @@
 {
-  "name": "arc-max-clone",
+  "name": "mooncow",
   "version": "0.1.0",
   "description": "Brings Arc Max AI features to Zen Browser via OpenRouter",
   "main": "main.js",
   "scripts": {
-    "build": "zip -r arc-max-clone-v0.1.0.zip mod.json preferences.json main.js style.css -x '*.git*' '*.DS_Store*'",
+    "build": "zip -r mooncow-v0.1.0.zip mod.json preferences.json main.js style.css -x '*.git*' '*.DS_Store*'",
     "dev": "echo 'Import the folder directly in Zen for development'",
     "clean": "rm -f *.zip"
   },
@@ -17,12 +17,12 @@
   ],
   "author": "Trevor Rosato",
   "license": "MIT",
-  "homepage": "https://github.com/trevorrosato/arc-max-clone",
+  "homepage": "https://github.com/trevorrosato/mooncow",
   "repository": {
     "type": "git",
-    "url": "https://github.com/trevorrosato/arc-max-clone.git"
+    "url": "https://github.com/trevorrosato/mooncow.git"
   },
   "bugs": {
-    "url": "https://github.com/trevorrosato/arc-max-clone/issues"
+    "url": "https://github.com/trevorrosato/mooncow/issues"
   }
 } 

@@ -1,7 +1,7 @@
-// Arc Max Clone for Zen Browser
+// Mooncow for Zen Browser
 // Brings all the Arc Max AI goodness to Zen via OpenRouter
 
-console.log('🌙 Arc Max Clone loading...');
+console.log('🌙 Mooncow loading...');
 
 // Access Zen preferences (assuming this is how Zen exposes prefs)
 const getPrefs = () => {
@@ -31,7 +31,7 @@ async function chat(userPrompt, systemPrompt = "You are a helpful assistant.") {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey()}`,
         "HTTP-Referer": "https://zen-browser.app",
-        "X-Title": "Arc Max Clone for Zen"
+        "X-Title": "Mooncow for Zen"
       },
       body: JSON.stringify({
         model: model(),
@@ -61,7 +61,7 @@ async function chat(userPrompt, systemPrompt = "You are a helpful assistant.") {
 function initAskOnPage() {
   if (!prefs.enable_ask_on_page) return;
   
-  console.log('🔍 Initializing Ask on Page...');
+  console.log('🔍 Initializing Ask on Page (Mooncow)...');
   
   // Override Cmd/Ctrl+F to show our AI search instead
   document.addEventListener("keydown", async (e) => {
@@ -69,28 +69,19 @@ function initAskOnPage() {
       e.preventDefault();
       e.stopPropagation();
       
-      const question = prompt("Ask about this page:");
+      const question = prompt("Ask Mooncow about this page:");
       if (!question) return;
       
-      showOverlay("Thinking about your question...", true);
+      showOverlay("Mooncow is thinking...", true);
       
       // Get page content but limit it to avoid token limits
       const pageText = document.body.innerText.slice(0, 30000);
       const pageTitle = document.title;
       const pageUrl = window.location.href;
       
-      const systemPrompt = `You are an expert at analyzing web pages and answering questions about their content. 
-      Be concise but thorough. If the answer isn't in the page content, say so clearly.`;
+      const systemPrompt = `You are an expert at analyzing web pages and answering questions about their content. \nBe concise but thorough. If the answer isn't in the page content, say so clearly.`;
       
-      const userPrompt = `PAGE TITLE: ${pageTitle}
-PAGE URL: ${pageUrl}
-
-PAGE CONTENT:
-${pageText}
-
-QUESTION: ${question}
-
-Please answer the question based only on the information provided above.`;
+      const userPrompt = `PAGE TITLE: ${pageTitle}\nPAGE URL: ${pageUrl}\n\nPAGE CONTENT:\n${pageText}\n\nQUESTION: ${question}\n\nPlease answer the question based only on the information provided above.`;
 
       const answer = await chat(userPrompt, systemPrompt);
       showOverlay(answer);
@@ -102,7 +93,7 @@ Please answer the question based only on the information provided above.`;
 function initLinkPreviews() {
   if (!prefs.enable_link_previews) return;
   
-  console.log('🔗 Initializing Link Previews...');
+  console.log('🔗 Initializing Link Previews (Mooncow)...');
   
   let hoverTimer;
   let currentTooltip;
@@ -116,13 +107,13 @@ function initLinkPreviews() {
     if (currentTooltip) currentTooltip.remove();
     
     hoverTimer = setTimeout(async () => {
-      currentTooltip = makeTooltip(e.pageX, e.pageY, "Loading preview...");
+      currentTooltip = makeTooltip(e.pageX, e.pageY, "Mooncow loading preview...");
       
       try {
         // Try to fetch the page (might fail due to CORS)
         const response = await fetch(link.href, { 
           mode: "cors",
-          headers: { "User-Agent": "Arc Max Clone Bot" }
+          headers: { "User-Agent": "Mooncow Bot" }
         });
         
         if (!response.ok) throw new Error("Could not fetch page");
@@ -133,7 +124,7 @@ function initLinkPreviews() {
         
         // Extract meaningful content
         const title = tempDiv.querySelector('title')?.textContent || '';
-        const description = tempDiv.querySelector('meta[name="description"]')?.content || '';
+        const description = tempDiv.querySelector('meta[name=\"description\"]')?.content || '';
         const text = tempDiv.innerText.slice(0, 2000);
         
         const summary = await chat(
@@ -168,7 +159,7 @@ function initLinkPreviews() {
 
 /* ---------- Feature: ChatGPT in Command Bar (Cmd+Option+G) ---------- */
 function initCommandBarChat() {
-  console.log('💬 Initializing Command Bar Chat...');
+  console.log('💬 Initializing Command Bar Chat (Mooncow)...');
   
   document.addEventListener("keydown", (e) => {
     if (e.metaKey && e.altKey && e.key === "g") {
@@ -182,7 +173,7 @@ function initCommandBarChat() {
 function initInstantLinks() {
   if (!prefs.enable_instant_links) return;
   
-  console.log('⚡ Initializing Instant Links...');
+  console.log('⚡ Initializing Instant Links (Mooncow)...');
   
   // Look for search inputs and add our handler
   document.addEventListener("keydown", async (e) => {
@@ -200,7 +191,7 @@ function initInstantLinks() {
         const query = activeElement.value.trim();
         if (!query) return;
         
-        showToast("🔍 Finding top result...");
+        showToast("🔍 Mooncow finding top result...");
         
         // Use DuckDuckGo Instant Answer API for I'm Feeling Lucky
         try {
@@ -236,7 +227,7 @@ function initBrowserFeatures() {
   
   // Tidy Tab Titles
   if (prefs.enable_tidy_tabs && browserAPI.tabs) {
-    console.log('📑 Initializing Tidy Tab Titles...');
+    console.log('📑 Initializing Tidy Tab Titles (Mooncow)...');
     
     browserAPI.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       if (tab.pinned && changeInfo.title && changeInfo.title.length > 35) {
@@ -258,7 +249,7 @@ function initBrowserFeatures() {
   
   // Tidy Downloads
   if (prefs.enable_tidy_downloads && browserAPI.downloads) {
-    console.log('📥 Initializing Tidy Downloads...');
+    console.log('📥 Initializing Tidy Downloads (Mooncow)...');
     
     browserAPI.downloads.onCreated.addListener(async (downloadItem) => {
       try {
@@ -269,7 +260,7 @@ function initBrowserFeatures() {
         
         if (newName && newName !== downloadItem.filename) {
           browserAPI.downloads.rename(downloadItem.id, newName);
-          showToast(`📁 Renamed download to: ${newName}`);
+          showToast(`📁 Mooncow renamed download to: ${newName}`);
         }
       } catch (error) {
         console.error('Error tidying download:', error);
@@ -318,7 +309,7 @@ function showChatOverlay() {
   
   chat.innerHTML = `
     <div class="chat-header">
-      <span>🤖 Arc Max Chat</span>
+      <span>🐮 Mooncow Chat</span>
       <button class="close-btn" onclick="this.closest('#arc-max-chat').remove()">×</button>
     </div>
     <div class="chat-body">
@@ -339,7 +330,7 @@ function showChatOverlay() {
       if (!question) return;
       
       response.style.display = 'block';
-      response.textContent = 'Thinking...';
+      response.textContent = 'Mooncow is thinking...';
       response.className = 'chat-response loading-dots';
       
       const answer = await chat(question, "You are a helpful assistant. Be concise but thorough.");
@@ -392,7 +383,7 @@ function showToast(message, duration = 3000) {
 }
 
 function escapeHtml(str) {
-  return str.replace(/[&<>"']/g, m => ({
+  return str.replace(/[&<>"]'/g, m => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
@@ -403,7 +394,7 @@ function escapeHtml(str) {
 
 /* ---------- Initialize Everything ---------- */
 function init() {
-  console.log('🚀 Arc Max Clone initializing...');
+  console.log('🚀 Mooncow initializing...');
   
   // Wait for DOM to be ready
   if (document.readyState === 'loading') {
@@ -418,11 +409,11 @@ function init() {
     initInstantLinks();
     initBrowserFeatures();
     
-    showToast('🌙 Arc Max Clone loaded!');
-    console.log('✅ Arc Max Clone ready!');
+    showToast('🌙 Mooncow loaded!');
+    console.log('✅ Mooncow ready!');
   } catch (error) {
-    console.error('❌ Arc Max Clone initialization failed:', error);
-    showToast('❌ Arc Max Clone failed to load');
+    console.error('❌ Mooncow initialization failed:', error);
+    showToast('❌ Mooncow failed to load');
   }
 }
 
