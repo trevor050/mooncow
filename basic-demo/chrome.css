@@ -1,0 +1,17 @@
+/* --- BASIC PINK DEMO --- */
+
+:root {
+  --zen-nav-bg: var(--pref-basicmod-accentColor) !important;
+  --zen-nav-fg: #ffffff !important;
+}
+
+/* Smooth hover tint */
+.tab,
+.workspaces-tab {
+  border-radius: 10px !important;
+  transition: background 200ms ease;
+}
+
+.tab:is(:hover, [selected]) {
+  background: color-mix(in srgb, var(--zen-nav-bg) 70%, black) !important;
+} 

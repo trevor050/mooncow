@@ -1,3 +1,5 @@
+**Heads-up:** A stripped-down sample mod now lives in `basic-demo/`.  If Mooncow feels overwhelming, start there first.
+
 # 🌙 Mooncow for Zen Browser
 
 > **Bring Arc's AI superpowers to Zen Browser**  

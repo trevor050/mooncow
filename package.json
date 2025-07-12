@@ -6,7 +6,8 @@
   "scripts": {
     "build": "zip -r mooncow-v0.1.0.zip mod.json preferences.json main.js style.css -x '*.git*' '*.DS_Store*'",
     "dev": "echo 'Import the folder directly in Zen for development'",
-    "clean": "rm -f *.zip"
+    "clean": "rm -f *.zip",
+    "build:demo": "cd basic-demo && zip -r ../basic-demo.zip *"
   },
   "keywords": [
     "zen-browser",
