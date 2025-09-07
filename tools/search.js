@@ -105,10 +105,11 @@ self.MultiSourceSearchTool = {
       includeArchives_Provenance: { type: "boolean", default: false },
       includeLocation_Geo: { type: "boolean", default: false }
     ,includeJinaSearch: { type: "boolean", default: false, description: "If true, run Jina Search (s.jina.ai) for extra discovery; disabled by default." }
+    ,includeSearXNG: { type: "boolean", default: true, description: "Try public SearXNG instances for meta-search results; ignored on failure." }
     },
     required: ["queries"]
   },
-  async execute({ queries, includeCoding=false, codingRelated=false, client_profile=null, includeNews_Current_Events=false, includeLegal_Gov=false, includeResearch_Scholarly=false, includeSocial_Dev=false, includeOpen_Data_Stats=false, includeArchives_Provenance=false, includeLocation_Geo=false, includeJinaSearch=false }) {
+  async execute({ queries, includeCoding=false, codingRelated=false, client_profile=null, includeNews_Current_Events=false, includeLegal_Gov=false, includeResearch_Scholarly=false, includeSocial_Dev=false, includeOpen_Data_Stats=false, includeArchives_Provenance=false, includeLocation_Geo=false, includeJinaSearch=false, includeSearXNG=true }) {
     // Normalize alias
     const coding = Boolean(includeCoding || codingRelated);
     const cache = new Map();
@@ -131,6 +132,34 @@ self.MultiSourceSearchTool = {
       const data = await withTimeout((signal) => fetch(url, { signal }).then(r => r.ok ? r.text() : null), ms ?? DEFAULT_TIMEOUT).catch(() => null);
       cache.set(url, data);
       return data;
+    };
+
+    // Best-effort SearXNG provider: try a small list of public instances, short timeout, stop on first success
+    const SEARXNG_INSTANCES = [
+      'https://searxng.site',
+      'https://searx.tiekoetter.com',
+      'https://search.disroot.org',
+      'https://searx.be',
+      'https://search.projectsegfau.lt'
+    ];
+    const searxngSearch = async (query, ms) => {
+      const statuses = [];
+      for (const base of SEARXNG_INSTANCES) {
+        try {
+          const qs = new URLSearchParams({ q: String(query||'').trim(), format: 'json' }).toString();
+          const url = `${base}/search?${qs}`;
+          const res = await withTimeout((signal) => fetch(url, { signal, headers: { 'Accept': 'application/json' } }), ms ?? 4500);
+          if (!res || !res.ok) { statuses.push({ base, status: res ? res.status : 0 }); continue; }
+          const json = await res.json().catch(() => null);
+          if (json && Array.isArray(json.results)) {
+            return { ok: true, instance: base, results: json.results };
+          }
+          statuses.push({ base, status: 'bad_json' });
+        } catch (e) {
+          statuses.push({ base, status: 'error' });
+        }
+      }
+      return { ok: false, attempts: statuses };
     };
 
     // Best-effort Jina Search wrapper (s.jina.ai). Requires API key; skip silently if missing.
@@ -314,6 +343,30 @@ self.MultiSourceSearchTool = {
       // Fetch DDG in parallel as it doesn't depend on wiki
       const ddg = await getJson(`https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_redirect=1&no_html=1`);
       sources.duckduckgo = ddg ? { heading: ddg.Heading || null, abstract: ddg.AbstractText || ddg.Abstract || null, url: ddg.AbstractURL || (ddg.Results?.[0]?.FirstURL ?? null) } : null;
+
+      // Optional SearXNG meta-search: try public instances, ignore on failure
+      if (includeSearXNG) {
+        try {
+          const sx = await searxngSearch(q).catch(() => null);
+          if (sx && sx.ok && Array.isArray(sx.results)) {
+            // Normalize and trim
+            const mapped = sx.results
+              .filter(it => it && (it.url || it.link) && hasRelevantToken(it.title))
+              .slice(0, PER_SOURCE)
+              .map(it => ({
+                title: it.title || '',
+                url: it.url || it.link || '',
+                snippet: it.content || it.snippet || '',
+                engines: it.engines || [],
+                score: it.score
+              }));
+            sources.searxng = { instance: sx.instance, results: mapped };
+          } else if (sx && sx.attempts) {
+            // Keep minimal telemetry without failing the tool
+            sources.searxng_status = { ok: false, attempts: sx.attempts };
+          }
+        } catch (_) { /* ignore entirely */ }
+      }
 
       // Optional Jina Search signal: only run when includeJinaSearch requested (best effort)
       if (includeJinaSearch) {
@@ -573,7 +626,7 @@ self.MultiSourceSearchTool = {
       return { query: q, sources };
     }));
 
-  return { results, meta: { includeCoding: coding, includeNews_Current_Events, includeLegal_Gov, includeResearch_Scholarly, includeSocial_Dev, includeOpen_Data_Stats, includeArchives_Provenance, includeLocation_Geo, includeJinaSearch, client_profile: client_profile || null } };
+  return { results, meta: { includeCoding: coding, includeNews_Current_Events, includeLegal_Gov, includeResearch_Scholarly, includeSocial_Dev, includeOpen_Data_Stats, includeArchives_Provenance, includeLocation_Geo, includeJinaSearch, includeSearXNG, client_profile: client_profile || null } };
   }
 };
 
