@@ -392,7 +392,7 @@ Example C — Messy news topic
 
 
 #Notes:
-- Always attempt to give an answer, if the information isn't niche you can give estimates based on your wide training data/knowledge base. Ensure your ansewer is well rounded and informative. Fully adhere to the users original prompt (except when it violates your safety guardrails). If you are unsure about something, say so. If you don't know, say so. Never make up facts or links.
+- Always attempt to give an answer, if the information isn't niche you can give estimates based on your wide training data/knowledge base. Ensure your ansewer is well rounded and informative. Fully adhere to the users original prompt (exce)
 
 #Final Note: Remember your context window. When thinking continously remind yourself of the current topic and the user's original prompt.
 `;
@@ -637,8 +637,7 @@ async function getCerebrasCompletion(messages, options = {}) {
                     // Synthesize an assistant message with tool_calls
                     const syntheticAssistant = {
                         role: 'assistant',
-                        // Preserve the model's full thinking/content emitted alongside the textual tool call
-                        content: contentStr,
+                        content: '',
                         tool_calls: [{ id: syntheticId, type: 'function', function: { name: parsed.name, arguments: JSON.stringify(parsed.arguments) } }]
                     };
                     bodyBase.messages.push(syntheticAssistant);
@@ -874,8 +873,6 @@ async function* streamCerebrasCompletion(messages, options = {}) {
     const toolAcc = new Map(); // index -> { id, name, args }
     // Textual <tool>/<tool_call> ... </> detection buffer
     let toolTextBuffer = '';
-    // Accumulates assistant tokens (including <think>) up to a tool call
-    let assistantAccum = '';
 
     async function* flushSegments(text) {
         let remaining = text;
@@ -959,7 +956,7 @@ async function* streamCerebrasCompletion(messages, options = {}) {
                                 const parsed = JSON.parse(acc.args);
                                 const toolId = acc.id || `tc_${idx}`;
                                 console.log('[CerebrasChat][stream][tool_calls] Parsed structured call:', acc.name, parsed);
-                                yield { type: 'tool_call', id: toolId, name: acc.name, arguments: parsed, assistant_content: assistantAccum };
+                                yield { type: 'tool_call', id: toolId, name: acc.name, arguments: parsed };
                                 if (typeof executeToolWithFallback === 'function') {
                                     console.log('[CerebrasChat][stream][tool_calls] Executing tool:', acc.name);
                                     const result = await executeToolWithFallback(acc.name, parsed);
@@ -974,7 +971,7 @@ async function* streamCerebrasCompletion(messages, options = {}) {
                                     } catch (_) { blob = ''; }
                                 // Clamp blob and append on-topic reminder for re-injection
                                 const __withReminder = combineBlobAndReminder(blob, messages);
-                                yield { type: 'tool_result', id: toolId, name: acc.name, result, blob: __withReminder, assistant_content: assistantAccum };
+                                yield { type: 'tool_result', id: toolId, name: acc.name, result, blob: __withReminder };
                                     // End turn after tool call to allow results processing
                                     return;
                                 } else {
@@ -1003,7 +1000,7 @@ async function* streamCerebrasCompletion(messages, options = {}) {
                 }
 
                 // Accumulate for textual tool parser; support <tool> and <tool_call>
-                if (tok) { toolTextBuffer += tok; assistantAccum += tok; }
+                if (tok) toolTextBuffer += tok;
                 const toolTagRe = /<(tool|tool_call)>([\s\S]*?)<\/\1>/i;
                 if (toolTagRe.test(toolTextBuffer)) {
                     const m = toolTextBuffer.match(toolTagRe);
@@ -1018,7 +1015,7 @@ async function* streamCerebrasCompletion(messages, options = {}) {
                             if (parsed && parsed.name) {
                                 console.log('[CerebrasChat][stream][text_tool] Parsed textual call:', parsed.name, parsed.arguments);
                                 const toolId = `text_${Date.now()}`;
-                                yield { type: 'tool_call', id: toolId, name: parsed.name, arguments: parsed.arguments, assistant_content: assistantAccum };
+                                yield { type: 'tool_call', id: toolId, name: parsed.name, arguments: parsed.arguments };
                                 if (typeof executeToolWithFallback === 'function') {
                                     console.log('[CerebrasChat][stream][text_tool] Executing tool:', parsed.name);
                                     const result = await executeToolWithFallback(parsed.name, parsed.arguments);
@@ -1032,7 +1029,7 @@ async function* streamCerebrasCompletion(messages, options = {}) {
                                         }
                                     } catch (_) { blob = ''; }
                                 const __withReminder2 = combineBlobAndReminder(blob, messages);
-                                yield { type: 'tool_result', id: toolId, name: parsed.name, result, blob: __withReminder2, assistant_content: assistantAccum };
+                                yield { type: 'tool_result', id: toolId, name: parsed.name, result, blob: __withReminder2 };
                                     // End turn after tool call to allow results processing
                                     return;
                                 } else {
@@ -1366,55 +1363,6 @@ function buildToolResultBlob(toolName, result, args) {
                 }
             }
             return lines.join('\n');
-        }
-        if (toolName === 'jina' || toolName === 'jina_page_summaries') {
-            const clamp = (s, n = 2000) => {
-                if (!s) return '';
-                const t = String(s).replace(/\s+/g, ' ').trim();
-                return t.length > n ? t.slice(0, n) + ' … [truncated]' : t;
-            };
-            const lines = [];
-            if (toolName === 'jina_page_summaries') {
-                const arr = Array.isArray(result?.summaries) ? result.summaries : [];
-                lines.push('jina_page_summaries:');
-                for (const it of arr.slice(0, 6)) {
-                    const ttl = (it.title || '').trim();
-                    const sum = clamp(it.summary || it.excerpt || '', 1200);
-                    const url = it.url || '';
-                    if (ttl) lines.push(`- ${ttl}`);
-                    if (sum) lines.push(`  ${sum}`);
-                    if (url) lines.push(`  ${url}`);
-                }
-                return lines.join('\n');
-            }
-            // jina tool
-            if (result?.mode === 'read') {
-                const arr = Array.isArray(result?.summaries) ? result.summaries : [];
-                lines.push('jina:read');
-                for (const it of arr.slice(0, 5)) {
-                    const ttl = (it.title || '').trim();
-                    const sum = clamp(it.summary || it.excerpt || '', 1200);
-                    const url = it.url || '';
-                    if (ttl) lines.push(`- ${ttl}`);
-                    if (sum) lines.push(`  ${sum}`);
-                    if (url) lines.push(`  ${url}`);
-                }
-                return lines.join('\n');
-            }
-            if (result?.mode === 'search') {
-                lines.push('jina:search');
-                const results = Array.isArray(result.results) ? result.results : [];
-                for (const r of results.slice(0, 5)) {
-                    const q = (r.query || '').trim();
-                    if (q) lines.push(`query: ${q}`);
-                    const data = r.data || r.text || '';
-                    const preview = clamp(typeof data === 'string' ? data : JSON.stringify(data), 800);
-                    if (preview) lines.push(preview);
-                }
-                return lines.join('\n');
-            }
-            // Default compact JSON clamp
-            return clamp(JSON.stringify(result), 3000);
         }
         // Default fallback: compact JSON
         return JSON.stringify(result);
