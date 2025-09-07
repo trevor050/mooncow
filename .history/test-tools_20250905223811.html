@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mooncow Tool Test</title>
+</head>
+<body>
+    <h1>Testing Mooncow Tool Calling</h1>
+    <button id="testBtn">Test Tool Call</button>
+    <div id="output"></div>
+    
+    <script type="module">
+        import { getCerebrasCompletion } from './chat.js';
+        
+        document.getElementById('testBtn').addEventListener('click', async () => {
+            const output = document.getElementById('output');
+            output.innerHTML = 'Testing...';
+            
+            try {
+                const messages = [
+                    { role: 'user', content: 'Search for information about donald trump' }
+                ];
+                
+                const response = await getCerebrasCompletion(messages);
+                output.innerHTML = `<pre>${response}</pre>`;
+            } catch (error) {
+                output.innerHTML = `<pre>Error: ${error.message}</pre>`;
+            }
+        });
+    </script>
+</body>
+</html>
