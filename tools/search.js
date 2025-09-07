@@ -154,8 +154,68 @@ self.MultiSourceSearchTool = {
         return p.toString();
       };
 
-      // Try JSON first (if enabled), then HTML scraping with DOMParser/regex fallback
+      // Tiny CSV line parser (handles basic quoted cells)
+      const parseCsv = (text, maxRows = 20) => {
+        try {
+          if (!text || typeof text !== 'string') return [];
+          const lines = text.trim().split(/\r?\n/).filter(Boolean);
+          if (!lines.length) return [];
+          const split = (line) => {
+            const out = [];
+            let cur = '', q = false;
+            for (let i = 0; i < line.length; i++) {
+              const ch = line[i];
+              if (ch === '"') {
+                if (q && line[i+1] === '"') { cur += '"'; i++; }
+                else { q = !q; }
+              } else if (ch === ',' && !q) { out.push(cur); cur = ''; }
+              else { cur += ch; }
+            }
+            out.push(cur);
+            return out.map(s => s.trim());
+          };
+          const header = split(lines.shift());
+          const idxTitle = header.findIndex(h => /title/i.test(h));
+          const idxUrl = header.findIndex(h => /^url$/i.test(h));
+          const idxSnippet = header.findIndex(h => /(content|snippet|desc)/i.test(h));
+          if (idxUrl === -1) return [];
+          const rows = [];
+          for (const line of lines.slice(0, maxRows)) {
+            const cells = split(line);
+            const title = (cells[idxTitle] || '').trim();
+            const url = (cells[idxUrl] || '').trim();
+            const snippet = (cells[idxSnippet] || '').replace(/\s+/g,' ').trim();
+            if (url) rows.push({ title, url, content: snippet });
+          }
+          return rows;
+        } catch (_) { return []; }
+      };
+
+      // Try CSV → RSS → JSON → HTML scraping with DOMParser/regex fallback
       for (const base of SEARXNG_INSTANCES) {
+        // CSV (leanest if enabled)
+        try {
+          const url = `${base}/search?${buildParams('csv')}`;
+          const csv = await withTimeout((signal) => fetch(url, { signal, headers: { 'Accept': 'text/csv' } }).then(r => r.ok ? r.text() : null), ms ?? 4500);
+          if (csv && /url/i.test(csv.split(/\r?\n/)[0] || '')) {
+            const rows = parseCsv(csv, 25);
+            if (rows.length) return { ok: true, format: 'csv', instance: base, results: rows };
+            statuses.push({ base, step: 'csv', status: 'empty' });
+          } else { statuses.push({ base, step: 'csv', status: 'no_csv' }); }
+        } catch (_) { statuses.push({ base, step: 'csv', status: 'error' }); }
+
+        // RSS (text, more verbose, but common)
+        try {
+          const url = `${base}/search?${buildParams('rss')}`;
+          const rss = await withTimeout((signal) => fetch(url, { signal, headers: { 'Accept': 'application/rss+xml, application/xml;q=0.9, text/xml;q=0.8' } }).then(r => r.ok ? r.text() : null), ms ?? 4500);
+          const items = parseRssAtom(rss || '', 20);
+          if (items && items.length) {
+            const mapped = items.map(it => ({ title: it.title || '', url: it.link || '', content: '' })).filter(r => r.url);
+            if (mapped.length) return { ok: true, format: 'rss', instance: base, results: mapped };
+          }
+          statuses.push({ base, step: 'rss', status: 'no_results' });
+        } catch (_) { statuses.push({ base, step: 'rss', status: 'error' }); }
+
         // JSON attempt (nice-to-have)
         try {
           const url = `${base}/search?${buildParams('json')}`;
@@ -182,15 +242,15 @@ self.MultiSourceSearchTool = {
           try {
             if (typeof DOMParser !== 'undefined') {
               const doc = new DOMParser().parseFromString(html, 'text/html');
-              const sel = [
-                '#main_results .result .result_header a',
-                'a.result_header__link',
-                '.result .result_header a'
-              ].join(',');
-              out = Array.from(doc.querySelectorAll(sel)).slice(0, 20).map(a => ({
-                title: (a.textContent || '').trim(),
-                url: a.href
-              })).filter(it => it.title && it.url);
+              const items = Array.from(doc.querySelectorAll('#main_results .result, .result-list .result, .result')); // broad
+              out = items.slice(0, 20).map(el => {
+                const a = el.querySelector('a.result_header__link, .result_header a, .result a');
+                const title = (a?.textContent || '').replace(/\s+/g,' ').trim();
+                const url = a?.href || '';
+                const sn = (el.querySelector('.content, .result-content, .result__snippet, .result-content .content')?.textContent || '')
+                  .replace(/\s+/g,' ').trim();
+                return { title, url, content: sn };
+              }).filter(it => it.title && it.url);
             }
           } catch (_) { /* ignore DOM parse errors */ }
           if (!out.length) {
@@ -202,12 +262,18 @@ self.MultiSourceSearchTool = {
               out = matches.slice(0, 20).map(m => {
                 const href = (m.match(/href=["']([^"']+)["']/i) || [,''])[1];
                 const text = (m.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
-                return { title: text, url: href };
+                return { title: text, url: href, content: '' };
               }).filter(it => it.title && it.url);
             } catch (_) { /* swallow */ }
           }
           if (out.length) {
-            return { ok: true, format: 'html', instance: base, results: out.map(it => ({ title: it.title, url: it.url })) };
+            // Ensure plain text and compactness
+            const clean = out.map(it => ({
+              title: String(it.title||'').replace(/\s+/g,' ').trim(),
+              url: it.url,
+              content: String(it.content||'').replace(/\s+/g,' ').trim()
+            }));
+            return { ok: true, format: 'html', instance: base, results: clean };
           }
           statuses.push({ base, step: 'html', status: 'no_results' });
         } catch (_) {
