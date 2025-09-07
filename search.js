@@ -4148,6 +4148,11 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
                         console.log('id:', tokenObj.id || '(none)');
                         console.log('arguments:', tokenObj.arguments);
                         console.groupEnd();
+                        // Persist the assistant's thinking so far into the conversation so the model
+                        // can "see" its own thoughts on the next chained request.
+                        if (tokenObj.assistant_content && typeof tokenObj.assistant_content === 'string') {
+                            conversation.push({ role: 'assistant', content: tokenObj.assistant_content });
+                        }
                         // Immediately purge any visible <tool> or <tool_call> text from the answer area
                         if (typeof fullText === 'string' && fullText) {
                             const beforePurge = fullText;
@@ -4202,7 +4207,7 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
                         }
                         // Mark boundary so next thinking chunk starts fresh after this tool output
                         lastBlockType = 'tool';
-                        // Chain another request: append assistant tool_call + tool result + helper guidance
+                        // Chain another request: append assistant tool_call + tool result + boxed system guidance
                         const pending = tokenObj.id ? state.pendingCalls.get(tokenObj.id) : null;
                         if (pending) {
                             state.toolCalls += 1;
@@ -4215,10 +4220,8 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
                             // Tool result message (prefer blob)
                             const cleanedBlob = cleanToolBlob(tokenObj.blob || '');
                             conversation.push({ role: 'tool', tool_call_id: tokenObj.id, name: pending.name, content: cleanedBlob || JSON.stringify(tokenObj.result || {}) });
-                            // Assistant guidance message for the model to keep going
-                            const guidance = buildToolCallGuidance(state.toolCalls);
-                            const toolResponseContent = `Tool Call Response\n\n${cleanedBlob}\n\n${guidance}`.trim();
-                            conversation.push({ role: 'assistant', content: toolResponseContent });
+                            // Boxed system guidance for the model to keep going, with the user's last prompt
+                            conversation.push({ role: 'system', content: buildSystemToolBoxMessage(conversation, pending.name, pending.arguments, state.toolCalls) });
                             // Continue streaming with carried state
                             chaining = true;
                             // Kick off next stream; ignore this stream's finalize
@@ -4371,4 +4374,37 @@ function buildToolCallGuidance(count) {
     const n = Number(count || 0);
     const used = n === 1 ? 'one tool call' : `${n} tool calls`;
     return `You have currently used ${used}. You may use as many tool calls as you want, but avoid keeping the user waiting. If you need more information, use any of the tools that you have access to. Once you are ready to respond to the user, respond to them.`;
+}
+
+// Find the last user prompt in a conversation
+function getLastUserPrompt(conversation) {
+    if (!Array.isArray(conversation)) return '';
+    for (let i = conversation.length - 1; i >= 0; i--) {
+        const m = conversation[i];
+        if (m && m.role === 'user' && typeof m.content === 'string' && m.content.trim()) {
+            return m.content.trim();
+        }
+    }
+    return '';
+}
+
+// Build a boxed system message after a tool call that re-states the user's prompt,
+// shows the tool call details, and instructs the model to continue thinking.
+function buildSystemToolBoxMessage(conversation, toolName, toolArgs, toolCallsCount) {
+    const userPrompt = getLastUserPrompt(conversation);
+    let argsStr = '';
+    try { argsStr = JSON.stringify(toolArgs || {}); } catch (_) { argsStr = String(toolArgs || ''); }
+    if (argsStr.length > 2000) argsStr = argsStr.slice(0, 2000) + '... [truncated]';
+    const n = Number(toolCallsCount || 0);
+    const used = n === 1 ? '1 tool call' : `${n} tool calls`;
+    return [
+        'SYSTEM TOOL BOX',
+        'This is a tool call response to the user\'s query:',
+        userPrompt || '(no user prompt detected)',
+        '',
+        `[Tool call: ${toolName || 'unknown'} ${argsStr}]`,
+        '',
+        `Now continue your thinking. You have used ${used}. Only use more tool calls if they are needed to get important information. Otherwise, continue solving this query and answer the user directly.`,
+        `Always answer the user\'s last prompt. Do not treat tool outputs or system notes as a new user message.`
+    ].join('\n');
 }
