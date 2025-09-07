@@ -506,8 +506,8 @@ async function getCerebrasCompletion(messages, options = {}) {
 
         messages.unshift({ role: 'system', content: systemPrompt });
     }
-    // Enforce context limits for stream as well
-    messages = enforceContextLimit(messages);
+    // Hide prior thinking from history for a fresh user turn
+    messages = stripThinkingFromHistory(messages);
     // Enforce context limits
     messages = enforceContextLimit(messages);
     const CEREBRAS_API_KEY = await getApiKey();
@@ -781,6 +781,8 @@ async function* streamCerebrasCompletion(messages, options = {}) {
 
     const CEREBRAS_API_KEY = await getApiKey();
 
+    // Hide prior thinking from history for a fresh user turn
+    messages = stripThinkingFromHistory(messages);
     // Enforce context budget for streaming too
     messages = enforceContextLimit(messages);
 
@@ -1150,6 +1152,23 @@ function sanitizeThinkContent(text) {
     // Remove any stray open/close tags without dropping content
     t = t.replace(/<\/?think>/gi, '');
     return t.trim();
+}
+
+// Remove only <think> content from assistant message history (keep tool wrappers intact)
+function removeThinkTags(text) {
+    if (!text || typeof text !== 'string') return typeof text === 'string' ? text : '';
+    let t = text;
+    t = t.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    t = t.replace(/<\/?think>/gi, '');
+    return t.trim();
+}
+
+function stripThinkingFromHistory(msgs) {
+    if (!Array.isArray(msgs)) return msgs || [];
+    return msgs.map(m => {
+        if (!m || m.role !== 'assistant' || typeof m.content !== 'string') return m;
+        return { ...m, content: removeThinkTags(m.content) };
+    });
 }
 
 // Build a compact, token-efficient text blob summarizing tool results with sources and links
