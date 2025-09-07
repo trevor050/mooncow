@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Search</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="search-container">
+    <div class="input-wrapper">
+      <input type="text" id="search-input" placeholder="Type anything..." autocomplete="off">
+      <div class="header-buttons">
+        <div id="restore-chat-button" style="display: none;" title="Restore Chat">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#888" viewBox="0 0 16 16"><path d="M14 1a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-2.5a2 2 0 0 0-1.6.8L8 14.333 6.1 11.8a2 2 0 0 0-1.6-.8H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12z"/></svg>
+        </div>
+        <div id="pin-button" title="Pin window">
+          <!-- SVG will be injected by JS -->
+        </div>
+      </div>
+      <div id="drag-handle"></div>
+    </div>
+    <div id="chat-tile-container" style="display: none;"></div>
+    <div id="results"></div>
+  </div>
+  <script src="ranking.js"></script>
+  <script src="search.js"></script>
+</body>
+</html> 

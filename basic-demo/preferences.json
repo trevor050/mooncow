@@ -1,8 +1,0 @@
-[
-  {
-    "property": "basicmod.accentColor",
-    "label": "Accent color (hex)",
-    "type": "string",
-    "defaultValue": "#ff1493"
-  }
-] 
