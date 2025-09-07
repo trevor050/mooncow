@@ -135,10 +135,10 @@ function isLikelyEntity(q) {
 const externalContextCache = new Map();
 
 // Context size management (approximate: 1 token ~ 4 chars)
-// Keep total under ~25k chars to fit ~8k token models reliably
-const MAX_CONTEXT_CHARS = 25000; // global budget across all messages
+// Keep total under ~20k chars to fit ~8k token models reliably
+const MAX_CONTEXT_CHARS = 20000; // global budget across all messages
 const MAX_MSG_CHARS = 4000;      // per non-tool message cap
-const MAX_TOOL_CHARS = 10000;      // per tool message cap (align with LLM blob cap)
+const MAX_TOOL_CHARS = 8500;      // per tool message cap (align with LLM blob cap)
 // Hard cap for tool result blob re-injected to the LLM
 const MAX_LLM_BLOB_CHARS = 12500;
 

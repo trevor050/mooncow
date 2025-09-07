@@ -135,12 +135,12 @@ function isLikelyEntity(q) {
 const externalContextCache = new Map();
 
 // Context size management (approximate: 1 token ~ 4 chars)
-// Keep total under ~25k chars to fit ~8k token models reliably
-const MAX_CONTEXT_CHARS = 25000; // global budget across all messages
+// Keep total under ~20k chars to fit ~8k token models reliably
+const MAX_CONTEXT_CHARS = 20000; // global budget across all messages
 const MAX_MSG_CHARS = 4000;      // per non-tool message cap
-const MAX_TOOL_CHARS = 10000;      // per tool message cap (align with LLM blob cap)
+const MAX_TOOL_CHARS = 12500;     // per tool message cap (aligned with LLM blob cap)
 // Hard cap for tool result blob re-injected to the LLM
-const MAX_LLM_BLOB_CHARS = 12500;
+const MAX_LLM_BLOB_CHARS = 8500;
 
 function minifyJsonString(s) {
     try {
@@ -236,12 +236,13 @@ function clampLLMBlob(text) {
     }
 }
 
-// Clamp a tool blob for LLM consumption. Guidance/reminders are sent
-// as separate system messages by the UI/driver, not embedded here.
+// Combine a clamped blob with a full, never-truncated reminder.
+// The base blob is clamped to MAX_LLM_BLOB_CHARS, then the reminder is appended in full.
 function combineBlobAndReminder(blobText, messages) {
-    // Historically we appended a reminder inside the blob; we now keep the blob
-    // strictly to tool output and send guidance as a separate system message.
-    return clampLLMBlob(blobText);
+    const reminder = buildToolCallReminder(messages);
+    const base = clampLLMBlob(blobText);
+    // Do not clamp the reminder — requirement: never truncate user prompt
+    return `${base}\n\n${reminder}`;
 }
 
 function buildToolCallReminder(messages) {
@@ -1260,20 +1261,20 @@ function buildToolResultBlob(toolName, result, args) {
                     }
                 }
 
-                // Wikipedia (prefer breadth over depth to keep token budget for other sources)
+                // Wikipedia
                 const wiki = src.core_always?.wikipedia;
                 if (wiki && (wiki.title || wiki.extract || wiki.url)) {
-                    if (wiki.extract) lines.push(`wikipedia: ${wiki.title ? wiki.title + ' — ' : ''}${clamp(wiki.extract, 700)}`);
+                    if (wiki.extract) lines.push(`wikipedia: ${wiki.title ? wiki.title + ' — ' : ''}${clamp(wiki.extract, 1200)}`);
                     if (wiki.url) lines.push(`link: ${wiki.url}`);
                 }
                 const wikiFull = src.core_always?.wikipedia_full;
                 if (wikiFull && wikiFull.extract) {
-                    lines.push(`wikipedia_full: ${clamp(wikiFull.extract, 1600)}`);
+                    lines.push(`wikipedia_full: ${clamp(wikiFull.extract, 5000)}`);
                 }
                 const wikiRelated = Array.isArray(src.core_always?.wikipedia_related) ? src.core_always.wikipedia_related : [];
                 if (wikiRelated.length) {
-                    for (const rel of wikiRelated.slice(0,2)) {
-                        lines.push(`wikipedia_related: ${rel.title} — ${clamp(rel.extract, 500)}`);
+                    for (const rel of wikiRelated.slice(0,3)) {
+                        lines.push(`wikipedia_related: ${rel.title} — ${clamp(rel.extract, 1200)}`);
                     }
                 }
                 const quickNews = Array.isArray(src.core_always?.news_quick) ? src.core_always.news_quick : [];
@@ -1292,26 +1293,13 @@ function buildToolResultBlob(toolName, result, args) {
                     lines.push(`wikidata: ${wd.slice(0, 5).map(x => x.label).filter(Boolean).join(' | ')}`);
                 }
 
-                // DuckDuckGo (compact IA)
+                // DuckDuckGo
                 const ddg = src.duckduckgo;
                 if (ddg && (ddg.heading || ddg.abstract || ddg.url)) {
                     const hdr = ddg.heading ? ddg.heading + ' — ' : '';
                     const abs = ddg.abstract || '';
-                    if (hdr || abs) lines.push(`duckduckgo: ${clamp(hdr + abs, 500)}`.trim());
+                    if (hdr || abs) lines.push(`duckduckgo: ${clamp(hdr + abs, 1200)}`.trim());
                     if (ddg.url) lines.push(`link: ${ddg.url}`);
-                }
-
-                // SearXNG results (lean title — url lines)
-                const sx = src.searxng;
-                if (sx && Array.isArray(sx.results) && sx.results.length) {
-                    const fmt = sx.format ? ` (${sx.format})` : '';
-                    lines.push(`searxng: ${sx.instance || ''}${fmt}`.trim());
-                    for (const it of sx.results.slice(0, 8)) {
-                        const ttl = (it.title || '').replace(/\s+/g, ' ').trim();
-                        const u = it.url || it.link || '';
-                        if (ttl) lines.push(`- ${ttl}`);
-                        if (u) lines.push(`  ${u}`);
-                    }
                 }
 
                 // News (surface richer buckets + a merged top set)
@@ -1337,9 +1325,9 @@ function buildToolResultBlob(toolName, result, args) {
                         if (link) lines.push(`  ${link}`);
                     }
                 }
-                // Then key aggregators (keep shallow to save tokens)
+                // Then key aggregators
                 ;['google_news','bing_news','reuters','guardian','ap','cnn','bbc','fox','aljazeera','politico','thehill','defenseone','breakingdefense','militarytimes','gdelt']
-                    .forEach((b) => printBucket(b, 3));
+                    .forEach((b) => printBucket(b, 5));
                 // If present, include select site-restricted Google News buckets for gov/defense
                 ;['google_news_defense_gov','google_news_whitehouse','google_news_congress','google_news_state_gov','google_news_treasury_gov','google_news_justice_gov','google_news_dhs_gov','google_news_gao_gov','google_news_crs_congress','google_news_everycrsreport','google_news_spaceforce_mil','google_news_navy_mil','google_news_army_mil','google_news_af_mil','google_news_marines_mil','google_news_defenseone','google_news_breakingdefense','google_news_militarytimes','google_news_politico','google_news_thehill']
                     .forEach((b) => printBucket(b, 3));
