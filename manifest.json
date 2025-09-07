@@ -75,6 +75,11 @@
     "https://www.courtlistener.com/*",
     "https://www.federalregister.gov/*",
     "https://www.scotusblog.com/*"
+    ,"https://searxng.site/*"
+    ,"https://searx.tiekoetter.com/*"
+    ,"https://search.disroot.org/*"
+    ,"https://searx.be/*"
+    ,"https://search.projectsegfau.lt/*"
   ],
   "background": {
     "scripts": [
