@@ -139,6 +139,8 @@ const externalContextCache = new Map();
 const MAX_CONTEXT_CHARS = 20000; // global budget across all messages
 const MAX_MSG_CHARS = 4000;      // per non-tool message cap
 const MAX_TOOL_CHARS = 4000;     // per tool message cap
+// Hard cap for tool result blob re-injected to the LLM
+const MAX_LLM_BLOB_CHARS = 10000;
 
 function minifyJsonString(s) {
     try {
@@ -200,6 +202,23 @@ function cleanToolBlobForLLM(text, limit = Math.floor(MAX_TOOL_CHARS * 0.9)) {
         const s = String(text || '');
         return s.length > limit ? s.slice(0, limit) + '... [truncated]' : s;
     }
+}
+
+// Clamp any tool blob (stringified) to MAX_LLM_BLOB_CHARS
+function clampLLMBlob(text) {
+    try {
+        const s = String(text == null ? '' : text);
+        if (s.length <= MAX_LLM_BLOB_CHARS) return s;
+        return s.slice(0, MAX_LLM_BLOB_CHARS) + '... [truncated]';
+    } catch (_) {
+        const s = String(text == null ? '' : text);
+        return s.length > MAX_LLM_BLOB_CHARS ? s.slice(0, MAX_LLM_BLOB_CHARS) + '... [truncated]' : s;
+    }
+}
+
+function buildToolCallReminder(messages) {
+    const userPrompt = getLastUserQuery(Array.isArray(messages) ? messages : []);
+    return `REMINDER: STAY ON TOPIC. THE USERS PROMPT IS: ${userPrompt}`;
 }
 
 function buildSystemPrompt({
@@ -615,18 +634,20 @@ async function getCerebrasCompletion(messages, options = {}) {
                             console.log({ combined_output: [blob] });
                             console.log('blob for LLM:', blob);
                             // Prefer compact blob over raw JSON to reduce token usage
-                            bodyBase.messages.push({ role: 'tool', tool_call_id: syntheticId, name: parsed.name, content: blob });
+                            bodyBase.messages.push({ role: 'tool', tool_call_id: syntheticId, name: parsed.name, content: clampLLMBlob(blob) });
                             // Add Tool Call Response assistant message with guidance
                             toolCallsThisTurn += 1;
                             const guidance = buildToolCallGuidance(toolCallsThisTurn);
-                            bodyBase.messages.push({ role: 'assistant', content: `Tool Call Response\n\n${cleanToolBlobForLLM(blob)}\n\n${guidance}` });
+                            const reminder = buildToolCallReminder(bodyBase.messages || messages);
+                            bodyBase.messages.push({ role: 'assistant', content: `Tool Call Response\n\n${cleanToolBlobForLLM(clampLLMBlob(blob), MAX_LLM_BLOB_CHARS)}\n\n${guidance}\n\n${reminder}` });
                             console.log('[CerebrasChat] Tool result (blob attached)');
                         } else {
                             const rawJson = JSON.stringify(result);
-                            bodyBase.messages.push({ role: 'tool', tool_call_id: syntheticId, name: parsed.name, content: rawJson });
+                            bodyBase.messages.push({ role: 'tool', tool_call_id: syntheticId, name: parsed.name, content: clampLLMBlob(rawJson) });
                             toolCallsThisTurn += 1;
                             const guidance = buildToolCallGuidance(toolCallsThisTurn);
-                            bodyBase.messages.push({ role: 'assistant', content: `Tool Call Response\n\n${cleanToolBlobForLLM(rawJson)}\n\n${guidance}` });
+                            const reminder = buildToolCallReminder(bodyBase.messages || messages);
+                            bodyBase.messages.push({ role: 'assistant', content: `Tool Call Response\n\n${cleanToolBlobForLLM(clampLLMBlob(rawJson), MAX_LLM_BLOB_CHARS)}\n\n${guidance}\n\n${reminder}` });
                         }
                     } catch (_) {}
                     console.log('[CerebrasChat] Tool-call summary:', { structuredCount: 0, textualPattern: looksLikeTextualToolCall, parsed: true });
@@ -666,14 +687,15 @@ async function getCerebrasCompletion(messages, options = {}) {
                             role: 'tool',
                             tool_call_id: call.id || (crypto?.randomUUID?.() || String(Date.now())),
                             name: toolName,
-                            content: blob
+                            content: clampLLMBlob(blob)
                         };
                         console.log('[CerebrasChat] Tool result (blob attached):', toolMsg);
                         bodyBase.messages.push(toolMsg);
                         // Add Tool Call Response assistant message with guidance
                         toolCallsThisTurn += 1;
                         const guidance = buildToolCallGuidance(toolCallsThisTurn);
-                        bodyBase.messages.push({ role: 'assistant', content: `Tool Call Response\n\n${cleanToolBlobForLLM(blob)}\n\n${guidance}` });
+                        const reminder = buildToolCallReminder(bodyBase.messages || messages);
+                        bodyBase.messages.push({ role: 'assistant', content: `Tool Call Response\n\n${cleanToolBlobForLLM(clampLLMBlob(blob), MAX_LLM_BLOB_CHARS)}\n\n${guidance}\n\n${reminder}` });
                         continue; // Proceed to next loop iteration to let model consume tool result
                     }
                 } catch (_) {}
@@ -681,14 +703,15 @@ async function getCerebrasCompletion(messages, options = {}) {
                     role: 'tool',
                     tool_call_id: call.id || (crypto?.randomUUID?.() || String(Date.now())),
                     name: toolName,
-                    content: JSON.stringify(result)
+                    content: clampLLMBlob(JSON.stringify(result))
                 };
                 console.log('[CerebrasChat] Tool result:', toolMsg);
                 bodyBase.messages.push(toolMsg);
                 // Add Tool Call Response assistant message with guidance
                 toolCallsThisTurn += 1;
                 const guidance = buildToolCallGuidance(toolCallsThisTurn);
-                bodyBase.messages.push({ role: 'assistant', content: `Tool Call Response\n\n${cleanToolBlobForLLM(toolMsg.content)}\n\n${guidance}` });
+                const reminder = buildToolCallReminder(bodyBase.messages || messages);
+                bodyBase.messages.push({ role: 'assistant', content: `Tool Call Response\n\n${cleanToolBlobForLLM(clampLLMBlob(toolMsg.content), MAX_LLM_BLOB_CHARS)}\n\n${guidance}\n\n${reminder}` });
             }
             console.log('[CerebrasChat] Tool-call summary:', { structuredCount: tcs.length, textualPattern: looksLikeTextualToolCall, parsed: !!parsedFallback });
 
@@ -927,7 +950,11 @@ async function* streamCerebrasCompletion(messages, options = {}) {
                                             console.log('blob for LLM:', blob);
                                         }
                                     } catch (_) { blob = ''; }
-                                    yield { type: 'tool_result', id: toolId, name: acc.name, result, blob };
+                                // Clamp blob and append on-topic reminder for re-injection
+                                const __rem1 = buildToolCallReminder(messages);
+                                const __clampedBlob = clampLLMBlob(blob);
+                                const __withReminder = clampLLMBlob(__clampedBlob + `\n\n${__rem1}`);
+                                yield { type: 'tool_result', id: toolId, name: acc.name, result, blob: __withReminder };
                                     // End turn after tool call to allow results processing
                                     return;
                                 } else {
@@ -984,7 +1011,10 @@ async function* streamCerebrasCompletion(messages, options = {}) {
                                             console.log('blob for LLM:', blob);
                                         }
                                     } catch (_) { blob = ''; }
-                                    yield { type: 'tool_result', id: toolId, name: parsed.name, result, blob };
+                                const __rem2 = buildToolCallReminder(messages);
+                                const __clampedBlob2 = clampLLMBlob(blob);
+                                const __withReminder2 = clampLLMBlob(__clampedBlob2 + `\n\n${__rem2}`);
+                                yield { type: 'tool_result', id: toolId, name: parsed.name, result, blob: __withReminder2 };
                                     // End turn after tool call to allow results processing
                                     return;
                                 } else {
