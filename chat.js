@@ -236,8 +236,8 @@ function clampLLMBlob(text) {
     }
 }
 
-// Combine a clamped blob with a full, never-truncated reminder.
-// The base blob is clamped to MAX_LLM_BLOB_CHARS, then the reminder is appended in full.
+// Clamp a tool blob for LLM consumption. Guidance/reminders are sent
+// as separate system messages by the UI/driver, not embedded here.
 function combineBlobAndReminder(blobText, messages) {
     // Historically we appended a reminder inside the blob; we now keep the blob
     // strictly to tool output and send guidance as a separate system message.
