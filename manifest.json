@@ -80,6 +80,7 @@
     ,"https://search.disroot.org/*"
     ,"https://searx.be/*"
     ,"https://search.projectsegfau.lt/*"
+    ,"https://searx.space/*"
   ],
   "background": {
     "scripts": [

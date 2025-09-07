@@ -136,27 +136,82 @@ self.MultiSourceSearchTool = {
 
     // Best-effort SearXNG provider: try a small list of public instances, short timeout, stop on first success
     const SEARXNG_INSTANCES = [
-      'https://searxng.site',
+      // Stable first choice
       'https://searx.tiekoetter.com',
+      // Backups (some may rate-limit; we fail gracefully)
+      'https://searxng.site',
       'https://search.disroot.org',
       'https://searx.be',
       'https://search.projectsegfau.lt'
     ];
-    const searxngSearch = async (query, ms) => {
+    const searxngSearch = async (query, ms, { categories = 'news,web', time_range = 'week' } = {}) => {
       const statuses = [];
+      const buildParams = (fmt) => {
+        const p = new URLSearchParams({ q: String(query||'').trim() });
+        if (categories) p.set('categories', categories);
+        if (time_range) p.set('time_range', time_range);
+        if (fmt) p.set('format', fmt);
+        return p.toString();
+      };
+
+      // Try JSON first (if enabled), then HTML scraping with DOMParser/regex fallback
       for (const base of SEARXNG_INSTANCES) {
+        // JSON attempt (nice-to-have)
         try {
-          const qs = new URLSearchParams({ q: String(query||'').trim(), format: 'json' }).toString();
-          const url = `${base}/search?${qs}`;
+          const url = `${base}/search?${buildParams('json')}`;
           const res = await withTimeout((signal) => fetch(url, { signal, headers: { 'Accept': 'application/json' } }), ms ?? 4500);
-          if (!res || !res.ok) { statuses.push({ base, status: res ? res.status : 0 }); continue; }
-          const json = await res.json().catch(() => null);
-          if (json && Array.isArray(json.results)) {
-            return { ok: true, instance: base, results: json.results };
+          if (res && res.ok) {
+            const json = await res.json().catch(() => null);
+            if (json && Array.isArray(json.results)) {
+              return { ok: true, format: 'json', instance: base, results: json.results };
+            }
+            statuses.push({ base, step: 'json', status: 'bad_json' });
+          } else {
+            statuses.push({ base, step: 'json', status: res ? res.status : 0 });
           }
-          statuses.push({ base, status: 'bad_json' });
-        } catch (e) {
-          statuses.push({ base, status: 'error' });
+        } catch (_) {
+          statuses.push({ base, step: 'json', status: 'error' });
+        }
+
+        // HTML fallback (robust, keyless)
+        try {
+          const url = `${base}/search?${buildParams()}`;
+          const html = await withTimeout((signal) => fetch(url, { signal, credentials: 'omit' }).then(r => r.ok ? r.text() : null), ms ?? 5500);
+          if (!html || typeof html !== 'string') { statuses.push({ base, step: 'html', status: 'no_html' }); continue; }
+          let out = [];
+          try {
+            if (typeof DOMParser !== 'undefined') {
+              const doc = new DOMParser().parseFromString(html, 'text/html');
+              const sel = [
+                '#main_results .result .result_header a',
+                'a.result_header__link',
+                '.result .result_header a'
+              ].join(',');
+              out = Array.from(doc.querySelectorAll(sel)).slice(0, 20).map(a => ({
+                title: (a.textContent || '').trim(),
+                url: a.href
+              })).filter(it => it.title && it.url);
+            }
+          } catch (_) { /* ignore DOM parse errors */ }
+          if (!out.length) {
+            // Regex light fallback
+            try {
+              const matches = html.match(/<a\s+[^>]*class=["'][^"']*result_header__link[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)
+                || html.match(/<a\s+[^>]*href=["']([^"']+)["'][^>]*class=["'][^"']*result_header[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi)
+                || [];
+              out = matches.slice(0, 20).map(m => {
+                const href = (m.match(/href=["']([^"']+)["']/i) || [,''])[1];
+                const text = (m.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+                return { title: text, url: href };
+              }).filter(it => it.title && it.url);
+            } catch (_) { /* swallow */ }
+          }
+          if (out.length) {
+            return { ok: true, format: 'html', instance: base, results: out.map(it => ({ title: it.title, url: it.url })) };
+          }
+          statuses.push({ base, step: 'html', status: 'no_results' });
+        } catch (_) {
+          statuses.push({ base, step: 'html', status: 'error' });
         }
       }
       return { ok: false, attempts: statuses };
@@ -347,7 +402,7 @@ self.MultiSourceSearchTool = {
       // Optional SearXNG meta-search: try public instances, ignore on failure
       if (includeSearXNG) {
         try {
-          const sx = await searxngSearch(q).catch(() => null);
+          const sx = await searxngSearch(q, undefined, { categories: 'news,web', time_range: 'week' }).catch(() => null);
           if (sx && sx.ok && Array.isArray(sx.results)) {
             // Normalize and trim
             const mapped = sx.results
@@ -360,7 +415,7 @@ self.MultiSourceSearchTool = {
                 engines: it.engines || [],
                 score: it.score
               }));
-            sources.searxng = { instance: sx.instance, results: mapped };
+            sources.searxng = { instance: sx.instance, format: sx.format, results: mapped };
           } else if (sx && sx.attempts) {
             // Keep minimal telemetry without failing the tool
             sources.searxng_status = { ok: false, attempts: sx.attempts };
