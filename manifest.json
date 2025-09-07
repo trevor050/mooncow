@@ -69,6 +69,8 @@
     "https://eutils.ncbi.nlm.nih.gov/*",
     "https://api.crossref.org/*",
     "https://api.openalex.org/*",
+    "https://api.github.com/*",
+    "https://api.qrserver.com/*",
     "https://www.biorxiv.org/*",
     "https://www.reddit.com/*",
     "https://nominatim.openstreetmap.org/*",
@@ -81,6 +83,9 @@
     "scripts": [
       "tools/search.js",
       "tools/jina.js",
+      "tools/github.js",
+      "tools/openalex.js",
+      "tools/qr.js",
       "tool-registry.js",
       "background.js",
       "chat.js",
