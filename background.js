@@ -23,7 +23,7 @@ async function getSuggestions(query) {
             if (typeof s !== 'string') return s;
             const MAX = 50000;
             if (s.length <= MAX) return s;
-            return s.slice(0, MAX) + '\n... [truncated]';
+            return s.slice(0, MAX) + '\n... [truncated; there is more text. If you would like to read it use the Jina Reader tool]';
         };
         Response.prototype.__mooncow_trunc_installed = true;
     } catch (e) {
@@ -150,6 +150,17 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.action === "createTab") {
         browser.tabs.create({ url: message.url, active: true });
+        return false;
+    }
+    
+    if (message.action === "navigateCurrentTab") {
+        const targetTabId = sender && sender.tab && sender.tab.id;
+        if (typeof targetTabId === 'number') {
+            browser.tabs.update(targetTabId, { url: message.url });
+        } else {
+            // Fallback: open a new tab if we don't know the sender tab
+            browser.tabs.create({ url: message.url, active: true });
+        }
         return false;
     }
     

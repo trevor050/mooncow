@@ -16,9 +16,6 @@ function ensureKnownToolsRegistered() {
     if (self.MultiSourceSearchTool && !have.has('multi_source_search')) toMaybeRegister.push(self.MultiSourceSearchTool);
     if (self.JinaTool && !have.has('jina')) toMaybeRegister.push(self.JinaTool);
     if (self.JinaSummarizerTool && !have.has('jina_page_summaries')) toMaybeRegister.push(self.JinaSummarizerTool);
-    if (self.GitHubSearchTool && !have.has('github_search')) toMaybeRegister.push(self.GitHubSearchTool);
-    if (self.OpenAlexSearchTool && !have.has('openalex_search')) toMaybeRegister.push(self.OpenAlexSearchTool);
-    if (self.QRCreateTool && !have.has('qr_create')) toMaybeRegister.push(self.QRCreateTool);
 
     // As a last-resort in worker contexts, attempt to lazy-load scripts
     // Guard importScripts for service-worker/workers only
@@ -35,24 +32,6 @@ function ensureKnownToolsRegistered() {
           try { importScripts('tools/jina.js'); } catch (_) {}
           try { if (!self.JinaTool) importScripts('jina.js'); } catch (_) {}
           if (self.JinaTool) toMaybeRegister.push(self.JinaTool);
-        }
-      } catch (_) { /* ignore */ }
-      try {
-        if (!self.GitHubSearchTool && !have.has('github_search')) {
-          try { importScripts('tools/github.js'); } catch (_) {}
-          if (self.GitHubSearchTool) toMaybeRegister.push(self.GitHubSearchTool);
-        }
-      } catch (_) { /* ignore */ }
-      try {
-        if (!self.OpenAlexSearchTool && !have.has('openalex_search')) {
-          try { importScripts('tools/openalex.js'); } catch (_) {}
-          if (self.OpenAlexSearchTool) toMaybeRegister.push(self.OpenAlexSearchTool);
-        }
-      } catch (_) { /* ignore */ }
-      try {
-        if (!self.QRCreateTool && !have.has('qr_create')) {
-          try { importScripts('tools/qr.js'); } catch (_) {}
-          if (self.QRCreateTool) toMaybeRegister.push(self.QRCreateTool);
         }
       } catch (_) { /* ignore */ }
     }
@@ -85,7 +64,7 @@ self.registerTool = function registerTool(tool) {
 };
 
 // Attempt to register any tools already attached to global
-[ self.MultiSourceSearchTool, self.JinaSummarizerTool, self.JinaTool, self.GitHubSearchTool, self.OpenAlexSearchTool, self.QRCreateTool ].filter(Boolean).forEach(self.registerTool);
+[ self.MultiSourceSearchTool, self.JinaSummarizerTool, self.JinaTool ].filter(Boolean).forEach(self.registerTool);
 
 // Ensure openAITools exists even if no tools yet (prevents consumer errors)
 if (!Array.isArray(self.openAITools)) self.openAITools = self.toolRegistry.map(t => ({
@@ -95,11 +74,18 @@ if (!Array.isArray(self.openAITools)) self.openAITools = self.toolRegistry.map(t
 console.log('[ToolRegistry] Startup tools:', self.toolRegistry.map(t => t?.name));
 
 // Quick sanity self-test hook (optional): run from background console
-self.__debugMultiSearch = async (queries = ["Donald Trump"]) => {
+self.__debugMultiSearch = async (queries = ["Donald Trump"], opts = {}) => {
   const tool = (self.toolRegistry || []).find(t => t.name === 'multi_source_search');
   if (!tool) { console.warn('[ToolRegistry] multi_source_search not registered'); return; }
   console.log('[ToolRegistry] __debugMultiSearch running for queries:', queries);
-  const res = await tool.execute({ queries, includeCoding: false, client_profile: buildClientProfile() });
+  const res = await tool.execute({
+    queries,
+    includeCoding: Boolean(opts.includeCoding),
+    includeNews_Current_Events: Boolean(opts.includeNews_Current_Events),
+    includeGoogleWeb: opts.includeGoogleWeb !== false, // default true
+    includeJinaSearch: Boolean(opts.includeJinaSearch),
+    client_profile: buildClientProfile()
+  });
   console.log('[ToolRegistry] __debugMultiSearch result:', res);
   return res;
 };
@@ -150,51 +136,6 @@ function buildClientProfile() {
           type: 'api', api: { endpoint: 'https://query.wikidata.org/sparql?format=json&query=<SPARQL>', method: 'GET', params: null,
             returns: 'JSON bindings; convert labels/values to fact lines.', cors: 'Yes', rate_limit: 'Polite; throttle; cache.', text_fields: ['bindings.* (assemble to prose)'] },
           notes: 'Great for quick facts (birthdates, positions, relationships).'
-        }
-      ],
-      news_current_events_extra: [
-        {
-          name: 'GDELT 2.1 Events', id: 'gdelt_events', run_by_default: false,
-          type: 'api', api: { endpoint: 'https://api.gdeltproject.org/api/v2/events/query?query=<q>&format=json', method: 'GET', params: null,
-            returns: 'JSON: global events with locations/topics.', cors: 'Yes', rate_limit: 'Generous', text_fields: ['title','themes','url'] },
-          notes: 'Good pulse for global incidents; validate with primary sources.'
-        },
-        {
-          name: 'Hacker News RSS', id: 'hn_rss', run_by_default: false,
-          type: 'rss', rss: { endpoint: 'https://hnrss.org/frontpage', returns: 'RSS items' }
-        }
-      ],
-      academic_research: [
-        {
-          name: 'OpenAlex', id: 'openalex_api', run_by_default: false,
-          type: 'api', api: { endpoint: 'https://api.openalex.org/works?search=<q>', method: 'GET', params: null,
-            returns: 'JSON: works with titles, authors, venues, OA links.', cors: 'Yes', rate_limit: 'Polite; generous.', text_fields: ['display_name','authorships.*.author.display_name','host_venue.display_name'] },
-          notes: 'Use for citations and scholarly grounding. Prefer OA links when present.'
-        },
-        {
-          name: 'Crossref', id: 'crossref_api', run_by_default: false,
-          type: 'api', api: { endpoint: 'https://api.crossref.org/works?query=<q>', method: 'GET', params: null,
-            returns: 'JSON: DOIs, titles, abstracts.', cors: 'Yes', rate_limit: 'Polite.', text_fields: ['title','abstract','container-title'] }
-        },
-        {
-          name: 'arXiv', id: 'arxiv_atom', run_by_default: false,
-          type: 'rss', rss: { endpoint: 'https://export.arxiv.org/api/query?search_query=<q>&max_results=25', returns: 'Atom feed entries', strip_to_text: ['title','summary','id'] },
-          notes: 'Great for preprints; pair with OpenAlex for citations.'
-        }
-      ],
-      dev_code_packages: [
-        {
-          name: 'GitHub Search', id: 'github_search_api', run_by_default: false,
-          type: 'api', api: { endpoint: 'https://api.github.com/search/repositories?q=<q>', method: 'GET', params: null,
-            returns: 'JSON: repos list with stars/topic/meta.', cors: 'Yes', rate_limit: '60/hr IP unauth.', text_fields: ['name','description','language','topics'] }
-        }
-      ],
-      utilities_misc: [
-        {
-          name: 'QRServer', id: 'qrserver', run_by_default: false,
-          type: 'api', api: { endpoint: 'https://api.qrserver.com/v1/create-qr-code/?data=<text>&size=200x200', method: 'GET', params: null,
-            returns: 'PNG image of QR code.', cors: 'Yes', rate_limit: 'Friendly.', text_fields: [] },
-          notes: 'Return image URL; clients can render directly.'
         }
       ],
       news_current_events: [
