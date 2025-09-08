@@ -32,7 +32,13 @@ function closeSearch() {
 function handleOutsideClick(event) {
     if (isPinned) return;
     const iframe = document.getElementById(iframeId);
-    if (iframe && event.target !== iframe) {
+    if (!iframe) return;
+    // Close when the initial pointerdown/click is outside the iframe bounds
+    const rect = iframe.getBoundingClientRect();
+    const x = event.clientX;
+    const y = event.clientY;
+    const inside = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+    if (!inside) {
         closeSearch();
     }
 }
@@ -97,7 +103,10 @@ function toggleSearch() {
     };
     
     document.body.appendChild(iframe);
-    setTimeout(() => window.addEventListener('click', handleOutsideClick, true), 0);
+    setTimeout(() => {
+      window.addEventListener('pointerdown', handleOutsideClick, true);
+      window.addEventListener('click', handleOutsideClick, true);
+    }, 0);
   }
 } 
 

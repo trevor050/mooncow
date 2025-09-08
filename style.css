@@ -341,7 +341,7 @@ body {
     border: 1px solid #374151;
     border-radius: 12px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65);
-    z-index: 2147483647 !important;
+    z-index: 2147483647 !important; /* above result items */
     display: none;
     overflow: hidden;
     isolation: isolate; /* prevent parent backdrop bleed */
@@ -561,7 +561,7 @@ body.chat-active .search-container {
     background: #111827; /* solid dark gray */
     border: 1px solid #374151;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
-    overflow: hidden;
+    overflow: hidden; /* ensure inner content respects rounded corners */
     position: relative;
     flex-shrink: 0;
     display: flex;
@@ -1239,6 +1239,8 @@ body.chat-active .search-container {
     transition: all 0.2s ease;
     border-radius: 8px;
     margin: 2px 0;
+    justify-content: flex-start;
+    gap: 12px;
 }
 
 .search-engine-item:hover {
@@ -1248,11 +1250,26 @@ body.chat-active .search-container {
 .engine-icon {
     width: 20px;
     height: 20px;
-    margin-right: 16px;
+    margin-right: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+}
+
+.engine-aliases {
+    display: flex;
+    gap: 6px;
+    margin-right: 8px;
+}
+
+.engine-alias {
+    font-size: 11px;
+    color: #cbd5e1;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    padding: 2px 6px;
+    border-radius: 999px;
 }
 
 .engine-icon img {
@@ -1270,6 +1287,7 @@ body.chat-active .search-container {
     font-size: 15px;
     color: #EAEAEA;
     font-weight: 400;
+    margin-left: auto;
 } 
 
 .chat-active #results {
@@ -1446,19 +1464,38 @@ body.chat-active .search-container {
 }
 
 .chat-message pre {
-    background: rgba(255, 255, 255, 0.05);
+    background: #0b1220; /* deep indigo panel */
     padding: 12px;
     border-radius: 8px;
     margin: 8px 0;
     overflow-x: auto;
-    border-left: 3px solid rgba(255, 255, 255, 0.2);
+    border-left: 3px solid rgba(99, 102, 241, 0.35);
 }
 
 .chat-message pre code {
     background: none;
     padding: 0;
-    color: #e0e0e0;
+    color: #e5e7eb;
     font-size: 0.85em;
+}
+
+/* Local lightweight syntax highlighting tokens */
+.code-token.keyword { color: #8bafff; font-weight: 600; }
+.code-token.builtin { color: #ffd166; }
+.code-token.string { color: #a8e6cf; }
+.code-token.comment { color: #94a3b8; font-style: italic; }
+.code-token.number { color: #fca5a5; }
+.code-token.defname { color: #f9f871; }
+.code-token.decorator { color: #f472b6; }
+
+/* HTML display box */
+.html-display-box {
+    margin: 8px 0;
+    padding: 12px;
+    border-radius: 10px;
+    background: #0f172a;
+    border: 1px solid rgba(99, 102, 241, 0.28);
+    overflow: hidden;
 }
 
 .chat-message h1, .chat-message h2, .chat-message h3 {
@@ -1557,8 +1594,8 @@ body.chat-active .search-container {
     overflow-x: auto;
     margin: 12px 0;
     border-radius: 10px;
-    background: rgba(20, 20, 20, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #111827; /* match card background */
+    border: 1px solid rgba(99, 102, 241, 0.25); /* indigo border */
     -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
 }
@@ -1587,14 +1624,14 @@ body.chat-active .search-container {
     min-width: 300px;
     border-collapse: collapse;
     margin: 0;
-    background: transparent;
+    background: #0f172a; /* slate-900-ish to match UI */
     border-radius: 0;
 }
 
 .markdown-table th,
 .markdown-table td {
     padding: 8px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.15);
     color: #e0e0e0;
     font-size: 12px;
     white-space: nowrap;
@@ -1602,12 +1639,24 @@ body.chat-active .search-container {
 }
 
 .markdown-table thead th {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(99, 102, 241, 0.18); /* indigo */
+    border-bottom: 1px solid rgba(99, 102, 241, 0.28);
     font-weight: 600;
-    color: #f3f4f6;
+    color: #eef2ff;
 }
 
-.markdown-table tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
+.markdown-table tbody tr:hover { background: rgba(30, 41, 59, 0.85); }
+.markdown-table tbody tr:nth-child(odd) { background: rgba(15, 23, 42, 0.95); }
+.markdown-table tbody tr:nth-child(even) { background: rgba(17, 24, 39, 0.95); }
+
+/* Bold/italic inside table cells */
+.markdown-table strong { color: #ffffff; font-weight: 700; }
+.markdown-table em { color: #cbd5e1; }
+
+/* Links and code inside tables */
+.markdown-table a { color: #9ca3af; border-bottom: 1px solid rgba(156, 163, 175, 0.3); text-decoration: none; }
+.markdown-table a:hover { border-bottom-color: rgba(156, 163, 175, 0.6); }
+.markdown-table code { background: rgba(255, 255, 255, 0.08); padding: 1px 4px; border-radius: 4px; }
 
 .latex-matrix {
     display: inline-block;

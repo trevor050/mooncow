@@ -208,49 +208,36 @@ window.searchDetectors = {
     detectAppSearch: function(query) {
         const trimmed = query.trim();
         
-        // Show app suggestions for just "@"
-        if (trimmed === '@') {
-            return {
-                type: 'show_app_suggestions',
-                apps: {
-                    google: { name: 'Google', url: 'https://www.google.com/search?q=' },
-                    youtube: { name: 'YouTube', url: 'https://www.youtube.com/results?search_query=' },
-                    twitter: { name: 'Twitter', url: 'https://twitter.com/search?q=' },
-                    github: { name: 'GitHub', url: 'https://github.com/search?q=' },
-                    reddit: { name: 'Reddit', url: 'https://www.reddit.com/search/?q=' },
-                    stackoverflow: { name: 'Stack Overflow', url: 'https://stackoverflow.com/search?q=' },
-                    amazon: { name: 'Amazon', url: 'https://www.amazon.com/s?k=' },
-                    ebay: { name: 'eBay', url: 'https://www.ebay.com/sch/i.html?_nkw=' },
-                    bing: { name: 'Bing', url: 'https://www.bing.com/search?q=' },
-                    duckduckgo: { name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' }
+        // Helper to resolve canonical engine key from key or alias (e.g., yt -> youtube)
+        function resolveEngineKey(serviceKeyOrAlias) {
+            if (!serviceKeyOrAlias) return null;
+            const key = serviceKeyOrAlias.toLowerCase();
+            if (SEARCH_ENGINES[key]) return key;
+            for (const [engineKey, info] of Object.entries(SEARCH_ENGINES)) {
+                if (Array.isArray(info.aliases) && info.aliases.some(a => a.replace(/^@/, '').toLowerCase() === key)) {
+                    return engineKey;
                 }
-            };
+            }
+            return null;
+        }
+
+        // Show app suggestions when user types '@' or a partial like '@you' (with or without trailing space)
+        if (trimmed.startsWith('@')) {
+            const partialOnly = /^@(\w+)?\s*$/.exec(trimmed);
+            if (partialOnly) {
+                return {
+                    type: 'show_app_suggestions',
+                    apps: SEARCH_ENGINES
+                };
+            }
         }
         
         // Handle @service queries
         const appMatch = trimmed.match(/^@(\w+)\s*(.*)$/);
         if (appMatch) {
             const [, service, searchTerm] = appMatch;
-            const serviceMap = {
-                google: { name: 'Google', url: 'https://www.google.com/search?q=' },
-                youtube: { name: 'YouTube', url: 'https://www.youtube.com/results?search_query=' },
-                twitter: { name: 'Twitter', url: 'https://twitter.com/search?q=' },
-                github: { name: 'GitHub', url: 'https://github.com/search?q=' },
-                reddit: { name: 'Reddit', url: 'https://www.reddit.com/search/?q=' },
-                stackoverflow: { name: 'Stack Overflow', url: 'https://stackoverflow.com/search?q=' },
-                amazon: { name: 'Amazon', url: 'https://www.amazon.com/s?k=' },
-                ebay: { name: 'eBay', url: 'https://www.ebay.com/sch/i.html?_nkw=' },
-                bing: { name: 'Bing', url: 'https://www.bing.com/search?q=' },
-                duckduckgo: { name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' },
-                netflix: { name: 'Netflix', url: 'https://www.netflix.com/search?q=' },
-                spotify: { name: 'Spotify', url: 'https://open.spotify.com/search/' },
-                linkedin: { name: 'LinkedIn', url: 'https://www.linkedin.com/search/results/all/?keywords=' },
-                maps: { name: 'Google Maps', url: 'https://www.google.com/maps/search/' },
-                drive: { name: 'Google Drive', url: 'https://drive.google.com/drive/search?q=' },
-                gmail: { name: 'Gmail', url: 'https://mail.google.com/mail/u/0/#search/' }
-            };
-            
-            const serviceInfo = serviceMap[service.toLowerCase()];
+            const resolvedKey = resolveEngineKey(service);
+            const serviceInfo = resolvedKey ? SEARCH_ENGINES[resolvedKey] : null;
             if (serviceInfo && searchTerm.trim()) {
                 return {
                     type: 'app_search',
@@ -785,6 +772,86 @@ const aiIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" f
 const sparkleIcon = `<svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-sparkles"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z" /></svg>`;
 const searchIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#888" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>`;
 const googleIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 262"><path fill="#4285F4" d="M255.95 133.534c0-11.08-.978-21.712-2.792-32H130.5v60.56h70.34c-3.003 16.304-12.15 30.14-25.906 39.44l42.017 32.597c24.41-22.52 38.5-55.74 38.5-100.6z"/><path fill="#34A853" d="M130.5 262c34.83 0 64.113-11.505 85.484-31.194l-42.017-32.597c-11.652 7.81-26.576 12.444-43.467 12.444-33.47 0-61.853-22.563-72.051-52.976H14.29v33.124A130.996 130.996 0 00130.5 262z"/><path fill="#FBBC05" d="M58.449 157.677a78.83 78.83 0 010-50.354V74.2H14.29a131.002 131.002 0 000 113.6l44.16-30.123z"/><path fill="#EA4335" d="M130.5 51.58c18.892 0 36.014 6.503 49.399 19.278l37.002-37.002C194.498 12.224 165.314 0 130.5 0 80.58 0 37.82 30.116 14.29 74.2l44.16 33.123c10.198-30.412 38.58-52.947 72.05-52.947z"/></svg>`;
+const xIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2H21l-7.43 8.497L22.5 22h-6.31l-5.022-6.088L5.2 22H2.444l7.93-9.06L1.5 2h6.41l4.59 5.576L18.244 2zm-2.21 18.004h1.74L7.053 3.93H5.24l10.794 16.074z"/></svg>`;
+
+// Centralized engine registry to make adding engines quick and consistent
+// Centralized engine registry to make adding engines quick and consistent
+const SEARCH_ENGINES = {
+    // --- existing ---
+    google:       { name: 'Google',        url: 'https://www.google.com/search?q=',                 aliases: ['@g', '@google'],         icon: googleIcon },
+    youtube:      { name: 'YouTube',       url: 'https://www.youtube.com/results?search_query=',    aliases: ['@yt', '@youtube'] },
+    twitter:      { name: 'X',             url: 'https://twitter.com/search?q=',                    aliases: ['@x', '@twitter'],        icon: xIcon },
+    github:       { name: 'GitHub',        url: 'https://github.com/search?q=',                     aliases: ['@gh', '@github'] },
+    reddit:       { name: 'Reddit',        url: 'https://www.reddit.com/search/?q=',                aliases: ['@r', '@reddit'] },
+    stackoverflow:{ name: 'Stack Overflow',url: 'https://stackoverflow.com/search?q=',              aliases: ['@so', '@stackoverflow'] },
+    amazon:       { name: 'Amazon',        url: 'https://www.amazon.com/s?k=',                      aliases: ['@amzn', '@amazon'] },
+    ebay:         { name: 'eBay',          url: 'https://www.ebay.com/sch/i.html?_nkw=',            aliases: ['@ebay'] },
+    bing:         { name: 'Bing',          url: 'https://www.bing.com/search?q=',                   aliases: ['@bing'] },
+    duckduckgo:   { name: 'DuckDuckGo',    url: 'https://duckduckgo.com/?q=',                       aliases: ['@ddg', '@duckduckgo'] },
+  
+    // --- AI / LLM engines ---
+    chatgpt:      { name: 'ChatGPT',       url: 'https://chatgpt.com/?q=',                          aliases: ['@gpt', '@chatgpt'] },            // supports ?q=
+    claude:       { name: 'Claude',        url: 'https://claude.ai/new?q=',                         aliases: ['@claude'] },                     // supports ?q=
+    perplexity:   { name: 'Perplexity',    url: 'https://www.perplexity.ai/search?q=',              aliases: ['@ppx', '@perplexity'] },         // /search?q=
+    kagi:         { name: 'Kagi',          url: 'https://kagi.com/search?q=',                       aliases: ['@kagi'] },
+    
+  
+    // --- Google verticals ---
+    google_images:{ name: 'Google Images', url: 'https://www.google.com/search?tbm=isch&q=',        aliases: ['@img', '@images'] },  // tbm=isch
+    google_news:  { name: 'Google News',   url: 'https://news.google.com/search?q=',                aliases: ['@news'] },
+    google_maps:  { name: 'Google Maps',   url: 'https://www.google.com/maps/search/?api=1&query=',aliases: ['@maps'] },
+    google_scholar:{name:'Google Scholar', url: 'https://scholar.google.com/scholar?q=',            aliases: ['@scholar'] },
+  
+    // --- Knowledge / docs ---
+    wikipedia:    { name: 'Wikipedia',     url: 'https://en.wikipedia.org/w/index.php?title=Special:Search&search=', aliases: ['@wiki'] },
+    mdn:          { name: 'MDN Web Docs',  url: 'https://developer.mozilla.org/en-US/search?q=',    aliases: ['@mdn'] },
+    devdocs:      { name: 'DevDocs',       url: 'https://devdocs.io/#q=',                           aliases: ['@devdocs'] },
+  
+    // --- Packages / dev ---
+    npm:          { name: 'npm',           url: 'https://www.npmjs.com/search?q=',                  aliases: ['@npm'] },
+    pypi:         { name: 'PyPI',          url: 'https://pypi.org/search/?q=',                      aliases: ['@pypi'] },
+    maven:        { name: 'Maven Central', url: 'https://search.maven.org/search?q=',               aliases: ['@maven'] },
+    crates:       { name: 'crates.io',     url: 'https://crates.io/search?q=',                      aliases: ['@crates', '@rust'] },
+    pkggo:        { name: 'pkg.go.dev',    url: 'https://pkg.go.dev/search?q=',                     aliases: ['@go', '@pkggo'] },
+    dockerhub:    { name: 'Docker Hub',    url: 'https://hub.docker.com/search?q=',                 aliases: ['@docker'] },
+  
+    // --- Code search / forges ---
+    sourcegraph:  { name: 'Sourcegraph',   url: 'https://sourcegraph.com/search?q=',                aliases: ['@sg', '@sourcegraph'] },
+    gitlab:       { name: 'GitLab',        url: 'https://gitlab.com/search?search=',                aliases: ['@gitlab'] },
+  
+    // --- Research ---
+    arxiv:        { name: 'arXiv',         url: 'https://arxiv.org/search/?searchtype=all&query=',  aliases: ['@arxiv'] },
+    semantic:     { name: 'Semantic Scholar', url: 'https://www.semanticscholar.org/search?q=',     aliases: ['@s2', '@semanticscholar'] },
+    pubmed:       { name: 'PubMed',        url: 'https://pubmed.ncbi.nlm.nih.gov/?term=',           aliases: ['@pubmed'] },
+  
+    // --- Tech news / product discovery ---
+    hn:           { name: 'Hacker News',   url: 'https://hn.algolia.com/?q=',                       aliases: ['@hn'] },
+    producthunt:  { name: 'Product Hunt',  url: 'https://www.producthunt.com/search?q=',            aliases: ['@ph', '@producthunt'] },
+  
+    // --- Stack Exchange network sites ---
+    stackexchange:{ name: 'Stack Exchange',url: 'https://stackexchange.com/search?q=',              aliases: ['@se'] },
+    superuser:    { name: 'Super User',    url: 'https://superuser.com/search?q=',                  aliases: ['@su', '@superuser'] },
+    serverfault:  { name: 'Server Fault',  url: 'https://serverfault.com/search?q=',                aliases: ['@sf', '@serverfault'] },
+    askubuntu:    { name: 'Ask Ubuntu',    url: 'https://askubuntu.com/search?q=',                  aliases: ['@au', '@askubuntu'] },
+  
+    // --- General web (alt) ---
+    yandex:       { name: 'Yandex',        url: 'https://yandex.com/search/?text=',                 aliases: ['@yandex'] },
+    baidu:        { name: 'Baidu',         url: 'https://www.baidu.com/s?wd=',                      aliases: ['@baidu'] },
+    qwant:        { name: 'Qwant',         url: 'https://www.qwant.com/?q=',                        aliases: ['@qwant'] },
+    ecosia:       { name: 'Ecosia',        url: 'https://www.ecosia.org/search?q=',                 aliases: ['@ecosia'] },
+    brave_search: { name: 'Brave Search',  url: 'https://search.brave.com/search?q=',               aliases: ['@brave'] },
+  
+    // --- Maps / open data ---
+    openstreetmap:{ name: 'OpenStreetMap', url: 'https://www.openstreetmap.org/search?query=',      aliases: ['@osm'] },
+  
+    // --- Media / entertainment ---
+    imdb:         { name: 'IMDb',          url: 'https://www.imdb.com/find?q=',                     aliases: ['@imdb'] },
+    rottentomatoes:{name:'Rotten Tomatoes',url: 'https://www.rottentomatoes.com/search?search=',    aliases: ['@rt', '@rottentomatoes'] },
+    goodreads:    { name: 'Goodreads',     url: 'https://www.goodreads.com/search?q=',              aliases: ['@gr', '@goodreads'] },
+    twitch:       { name: 'Twitch',        url: 'https://www.twitch.tv/search?term=',               aliases: ['@twitch'] },
+    steam:        { name: 'Steam',         url: 'https://store.steampowered.com/search/?term=',     aliases: ['@steam'] }
+  };
+  
 const calcIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M0 1.5A.5.5 0 01.5 1h15a.5.5 0 01.5.5V15a1 1 0 01-1 1H1a1 1 0 01-1-1V1.5zM1 2v13h14V2H1z"/><path d="M2 4h12v2H2V4zm2 3h2v2H4V7zm3 0h2v2H7V7zm3 0h2v2h-2V7zM4 10h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2z"/></svg>`;
 
 // AI Provider icons
@@ -990,7 +1057,8 @@ function switchToChatSession(chatId) {
         chatTileContainer.innerHTML = '';
         chatTileContainer.style.display = 'flex';
         chatTileContainer.style.height = '260px';
-        chatTileContainer.style.overflow = 'visible';
+        // Keep inner chat content clipped so rounded corners are respected
+        chatTileContainer.style.overflow = 'hidden';
 
         const closeButton = document.createElement('button');
         closeButton.innerHTML = '×';
@@ -1273,6 +1341,14 @@ function showChatHistory() {
         const left = Math.max(8, Math.min(rect.right - width, vpWidth - width - 8));
         chatHistoryDropdown.style.top = `${Math.round(rect.bottom + 6)}px`;
         chatHistoryDropdown.style.left = `${Math.round(left)}px`;
+        // Ensure dropdown is on top of results and not clipped by ancestors
+        chatHistoryDropdown.style.position = 'fixed';
+        chatHistoryDropdown.style.zIndex = '2147483647';
+    }
+    if (!historyButton) {
+        // fallback: top-left
+        chatHistoryDropdown.style.top = '60px';
+        chatHistoryDropdown.style.left = '12px';
     }
 }
 
@@ -1300,7 +1376,8 @@ function createChatHistoryDropdown() {
         overflow-y: auto;
     `;
     
-    document.querySelector('.header-buttons').appendChild(chatHistoryDropdown);
+    // Append to body so it isn't trapped under results list stacking contexts
+    document.body.appendChild(chatHistoryDropdown);
     
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
@@ -1502,18 +1579,21 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
         let rankableCandidates = [...specialResults];
         rankableCandidates.push(...tabResults.map(tab => ({ ...tab, type: 'tab', text: tab.title })));
         rankableCandidates.push(...suggestions.map((s, index) => {
-            const answerMatch = s.match(/^\s*=\s*(.+)$/); // Match suggestions starting with "="
+            const sText = typeof s === 'object' && s !== null ? (s.text || '') : s;
+            const sDesc = typeof s === 'object' && s !== null ? (s.description || null) : null;
+            const sImage = typeof s === 'object' && s !== null ? (s.image || null) : null;
+            const answerMatch = typeof sText === 'string' ? sText.match(/^\s*=\s*(.+)$/) : null; // calculator-like suggestions
             if (answerMatch) {
                 return {
                     type: 'calculator',
-                    text: s,
-                    title: answerMatch[1].trim(), // The title is just the answer
+                    text: sText,
+                    title: answerMatch[1].trim(),
                     answer: answerMatch[1].trim(),
-                    isCopyResult: true, // Special flag for our new result type
+                    isCopyResult: true,
                     remoteRank: index
                 };
             }
-            return { type: 'suggestion', text: s, title: s, remoteRank: index };
+            return { type: 'suggestion', text: sText, title: sText, description: sDesc, image: sImage, remoteRank: index };
         }));
         
         currentResults = window.rankResults(rankableCandidates, query);
@@ -1524,6 +1604,8 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
     resultsDiv.innerHTML = ''; // Clear again just in case
     currentResults.forEach(async (result, i) => {
         const resultItem = document.createElement('div');
+        // Bind the backing data to the DOM element so keyboard actions use what the user sees
+        resultItem.__result = result;
         resultItem.dataset.type = result.type; // tag for later reordering
         
         // --- Set Classes ---
@@ -1531,6 +1613,8 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
             resultItem.className = 'result-item search-engine-item';
         } else if (result.type === 'app_search') {
             resultItem.className = 'result-item app-search-result';
+        } else if (result.type === 'ai_quick') {
+            resultItem.className = 'result-item ai-quick-result';
         } else {
             resultItem.className = 'result-item';
         }
@@ -1543,13 +1627,22 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
                 iconDiv.innerHTML = result.icon;
             } else {
                 const favicon = document.createElement('img');
-                favicon.src = `https://www.google.com/s2/favicons?domain=${result.domain}&sz=32`;
+                favicon.src = result.favicon || `https://www.google.com/s2/favicons?domain=${result.domain || 'google.com'}&sz=32`;
                 iconDiv.appendChild(favicon);
             }
+            const aliasesWrap = document.createElement('div');
+            aliasesWrap.className = 'engine-aliases';
+            (result.aliases || []).forEach(a => {
+                const chip = document.createElement('span');
+                chip.className = 'engine-alias';
+                chip.textContent = a;
+                aliasesWrap.appendChild(chip);
+            });
             const textDiv = document.createElement('div');
             textDiv.className = 'engine-text';
             textDiv.textContent = result.title;
             resultItem.appendChild(iconDiv);
+            if ((result.aliases || []).length) resultItem.appendChild(aliasesWrap);
             resultItem.appendChild(textDiv);
         } else if (result.type === 'app_search') {
             const searchIconDiv = document.createElement('div');
@@ -1577,6 +1670,18 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
             textContainer.appendChild(serviceName);
             
             resultItem.appendChild(searchIconDiv);
+            resultItem.appendChild(textContainer);
+        } else if (result.type === 'ai_quick') {
+            const icon = document.createElement('div');
+            icon.className = 'search-result-icon';
+            icon.innerHTML = sparkleIcon;
+            const textContainer = document.createElement('div');
+            textContainer.className = 'search-result-content';
+            const title = document.createElement('span');
+            title.className = 'title';
+            title.textContent = result.title;
+            textContainer.appendChild(title);
+            resultItem.appendChild(icon);
             resultItem.appendChild(textContainer);
         } else {
             // --- Default Rendering Logic ---
@@ -1671,7 +1776,7 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
             } else if (result.type === 'tab') {
                 const favIcon = document.createElement('img');
                 favIcon.className = 'favicon';
-                favIcon.src = result.favIconUrl || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgZmlsbD0iI2FhYSIgdmlld0JveD0iMCAwIDE2IDE2Ij48cGF0aCBkPSJNMTYgOC5BOSA4Ljg5MSAwIDAgMSAxMy45MjcgMTFINVYxLjA3M0E4Ljg5MSA4Ljg5MSAwIDAgMSA4IDB2MWE3LjY4IDcuNjggMCAwIDAgNS41MjUgMi4xMDJWOWEzIDMgMCAwIDEgMyAzSDh2M2E4Ljg5MSA4Ljg5MSAwIDAgMS0xMC45MjctNUgxMXYtM2EzIDMgMCAwIDEtMy0zVjEuNjMxQTcuNjggNy42OCAwIDAgMCAxIDguM3YxSDVWOGEyLjUgMi41IDAgMCAxIDUtMHYxSDV6bS00IDRhMSAxIDAgMSAwIDAtMiAxIDEgMCAwIDAgMCAyeiIvPjwvc3ZnPg==';
+                favIcon.src = result.favIconUrl || (result.url ? `https://www.google.com/s2/favicons?domain=${(new URL(result.url)).hostname}&sz=32` : '');
                 resultItem.appendChild(favIcon);
             }
 
@@ -1854,12 +1959,19 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
                     }
                     searchInput.focus();
                     break;
+                case 'app_search':
+                    if (result.url) {
+                        runtimeSendMessage({ action: "createTab", url: result.url });
+                    }
+                    break;
                 case 'tab':
                     runtimeSendMessage({ action: "switchToTab", tabId: result.id, windowId: result.windowId });
                     break;
-                case 'google': case 'suggestion': case 'app_search': case 'history': case 'bookmark':
-                    runtimeSendMessage({ action: "createTab", url: result.url || `https://www.google.com/search?q=${encodeURIComponent(result.text)}` });
+                case 'ai_quick': {
+                    const prompt = 'Analyze this page thoroughly. Use multiple tool calls (multi_source_search with includeGoogleWeb:true and Jina reads) to extract key context, entities, and claims. Synthesize a concise, cited summary and suggest next steps.';
+                    activateAIChat(prompt);
                     break;
+                }
                 case 'ai':
                     activateAIChat(result.query);
                     break;
@@ -1940,6 +2052,9 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
                 case 'color':
                     activateColorPicker(result);
                     break;
+                case 'google':
+                    runtimeSendMessage({ action: "createTab", url: `https://www.google.com/search?q=${encodeURIComponent(result.query || result.text || '')}` });
+                    break;
                 case 'navigation':
                     runtimeSendMessage({ action: "createTab", url: result.url });
                     break;
@@ -1980,7 +2095,7 @@ function restoreChat() {
     // Show the chat tile
     chatTileContainer.style.display = 'block';
     chatTileContainer.style.height = '260px';
-    chatTileContainer.style.overflow = 'visible';
+    chatTileContainer.style.overflow = 'hidden';
     
     // Restore current chat session if it exists
     if (currentChatId && chatSessions.has(currentChatId)) {
@@ -2055,7 +2170,7 @@ function activateColorPicker(colorResult) {
     chatTileContainer.innerHTML = '';
     chatTileContainer.style.display = 'flex';
     chatTileContainer.style.height = '400px';
-    chatTileContainer.style.overflow = 'visible';
+    chatTileContainer.style.overflow = 'hidden';
     chatTileContainer.style.flexDirection = 'column';
     chatTileContainer.style.padding = '20px';
     chatTileContainer.style.background = '#2d3748';
@@ -2103,7 +2218,7 @@ function activateColorPicker(colorResult) {
             chatTileContainer.classList.add('expanded');
             chatTileContainer.style.height = '450px';
             expandButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2 2h3"/>
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
             </svg>`;
             expandButton.title = 'Shrink chat';
         }
@@ -2681,7 +2796,7 @@ async function activateAIChat(query) {
     chatTileContainer.innerHTML = '';
     chatTileContainer.style.display = 'flex';
     chatTileContainer.style.height = '260px';
-    chatTileContainer.style.overflow = 'visible';
+    chatTileContainer.style.overflow = 'hidden';
 
     const closeButton = document.createElement('button');
     closeButton.innerHTML = '×';
@@ -2890,19 +3005,25 @@ function appendMessage(text, type, container, isThinking = false) {
             const sec = message.querySelector(`#${thinkId}`);
             if (sec) sec.open = !sec.open;
             thinkToggle.classList.toggle('active', sec && sec.open);
+            const detailsEl = message.querySelector(`#${thinkId}`);
+            if (detailsEl) detailsEl.dataset.thinkingOpen = detailsEl.open ? 'true' : 'false';
         });
         toggles.appendChild(thinkToggle);
         const thinkDetails = document.createElement('details');
         thinkDetails.className = 'debug-section debug-thinking';
         thinkDetails.id = thinkId;
         thinkDetails.innerHTML = `<summary><span class="debug-label">Thinking… (click to expand)</span></summary><div class="debug-content thinking-content"></div>`;
+        thinkDetails.open = false;
+        thinkDetails.dataset.thinkingOpen = 'false';
         panels.appendChild(thinkDetails);
         addChatActions(message);
+        postRenderEnhancements(message);
     } else if (type === 'ai') {
         // For AI messages, parse markdown
         const htmlContent = parseMarkdown(stripInvisible(text));
         message.innerHTML = htmlContent;
         addChatActions(message);
+        postRenderEnhancements(message);
 
         // Add click handlers for Ask Mooncow hyperlinks
         message.querySelectorAll('.ask-mooncow-link').forEach(link => {
@@ -2931,6 +3052,7 @@ function updateAiMessage(element, newText) {
     // If the element contains a thinking details, keep it and render answer separately
     const answerEl = element.querySelector('.answer-content');
     const details = element.querySelector('details');
+    // Default to closed when rendering the answer
     const cleaned = stripInvisible(newText || '');
     if (details) details.open = false;
     if (answerEl) {
@@ -2941,6 +3063,7 @@ function updateAiMessage(element, newText) {
     }
     // Ensure actions exist for AI messages
     addChatActions(element);
+    postRenderEnhancements(element);
     
     // Add click handlers for Ask Mooncow hyperlinks
     element.querySelectorAll('.ask-mooncow-link').forEach(link => {
@@ -3023,6 +3146,57 @@ function addChatActions(messageEl) {
     actions.appendChild(copyBtn);
     actions.appendChild(deleteBtn);
     messageEl.appendChild(actions);
+}
+
+// After rendering AI content, apply optional HTML mode and local highlighting
+function postRenderEnhancements(messageEl) {
+    try {
+        if (!messageEl || !messageEl.classList || !messageEl.classList.contains('ai-message')) return;
+        // 1) HTML display mode
+        const answerEl = messageEl.querySelector('.answer-content') || messageEl;
+        const raw = answerEl.innerText || answerEl.textContent || '';
+        const hdr = extractHtmlDisplayRule(raw);
+        if (hdr.isHtmlMode) {
+            // Render sanitized HTML inside shadow DOM to prevent style leakage
+            const host = document.createElement('div');
+            host.className = 'html-display-box';
+            const shadow = host.attachShadow({ mode: 'open' });
+            const sanitized = sanitizeHtmlForDisplay(hdr.content);
+            shadow.innerHTML = sanitized;
+            // Enforce sensible viewport with hard caps
+            const DEFAULT_W = 800, DEFAULT_H = 500;
+            const MAX_W = 1000, MAX_H = 700, MIN_W = 200, MIN_H = 150;
+            const vw = Math.max(MIN_W, Math.min(MAX_W, (hdr.viewport && hdr.viewport.w) || DEFAULT_W));
+            const vh = Math.max(MIN_H, Math.min(MAX_H, (hdr.viewport && hdr.viewport.h) || DEFAULT_H));
+            host.style.display = 'block';
+            host.style.width = '100%';
+            host.style.maxHeight = MAX_H + 'px';
+            host.style.overflow = 'auto';
+            // Stop event propagation so nothing escapes the box
+            const stop = (e) => { try { e.stopPropagation(); } catch (_) {} };
+            ['click','submit','keydown','keyup','pointerdown','pointerup'].forEach(t => host.addEventListener(t, stop, true));
+            // Optional: restricted interactivity via data-action (toggle/setText) inside the shadow root
+            if (hdr.allowJs) {
+                shadow.addEventListener('click', (e) => {
+                    const el = e.target && e.target.closest('[data-action]');
+                    if (!el) return;
+                    const action = (el.getAttribute('data-action')||'').toLowerCase();
+                    const targetSel = el.getAttribute('data-target')||'';
+                    const txt = el.getAttribute('data-text')||'';
+                    const target = targetSel ? shadow.querySelector(targetSel) : null;
+                    if (action === 'toggle' && target) {
+                        target.style.display = (target.style.display === 'none') ? '' : 'none';
+                    } else if (action === 'settext' && target) {
+                        target.textContent = txt;
+                    }
+                });
+            }
+            answerEl.innerHTML = '';
+            answerEl.appendChild(host);
+        }
+        // 2) Local highlighting for code blocks
+        highlightCodeBlocks(messageEl);
+    } catch (_) {}
 }
 
 // Simple LaTeX to HTML renderer for common math expressions
@@ -3123,8 +3297,8 @@ function parseMarkdown(text) {
     let processedText = text
         .replace(/```latex\n?([\s\S]*?)```/g, (match, latex) => protect(latex, 'latex-block'))
         .replace(/<latex>(.*?)<\/latex>/g, (match, latex) => protect(latex, 'latex-inline'))
-        .replace(/```([a-zA-Z]*)\n?([\s\S]*?)```/g, (match, lang, code) => 
-            protect(`<pre><code class="language-${lang}">${code}</code></pre>`, 'html'))
+        .replace(/```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/g, (match, lang, code) => 
+            protect(`<pre><code class="language-${lang || 'plaintext'}">${code}</code></pre>`, 'html'))
         .replace(/`([^`]+)`/g, (match, code) => protect(`<code>${code}</code>`, 'html'));
 
     // Step 1.5: Convert GitHub-style Markdown tables into HTML (with header separator row)
@@ -3144,6 +3318,13 @@ function parseMarkdown(text) {
         if (cols && segs.length !== cols) return false;
         return segs.every(c => /^:?-{3,}:?$/.test(c));
     };
+    const escapeHtmlCell = (s) => String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    const formatCell = (s) => escapeHtmlCell(s)
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/__(.*?)__/g, '<strong>$1</strong>');
     const lines = processedText.split('\n');
     let outLines = [];
     for (let i = 0; i < lines.length; i++) {
@@ -3158,9 +3339,9 @@ function parseMarkdown(text) {
                 rows.push(rc);
                 j++;
             }
-            const thead = `<thead><tr>${headerCells.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
+            const thead = `<thead><tr>${headerCells.map(c => `<th>${formatCell(c)}</th>`).join('')}</tr></thead>`;
             const tbody = rows.length
-                ? `<tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>`
+                ? `<tbody>${rows.map(r => `<tr>${r.map(c => `<td>${formatCell(c)}</td>`).join('')}</tr>`).join('')}</tbody>`
                 : '<tbody></tbody>';
             const htmlTable = `<div class="table-wrapper"><table class="markdown-table">${thead}${tbody}</table></div>`;
             outLines.push(protect(htmlTable, 'html'));
@@ -3239,6 +3420,177 @@ function parseMarkdown(text) {
     return restore(processedText);
 }
 
+// --- Lightweight syntax highlighting (CSP-safe, local only) ---
+function escapeHtml(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function highlightPythonCode(src) {
+    const kw = [
+        'False','None','True','and','as','assert','async','await','break','class','continue','def','del','elif','else','except','finally','for','from','global','if','import','in','is','lambda','nonlocal','not','or','pass','raise','return','try','while','with','yield'
+    ];
+    const builtins = [
+        'abs','dict','help','min','setattr','all','dir','hex','next','slice','any','divmod','id','object','sorted','ascii','enumerate','input','oct','staticmethod','bin','eval','int','open','str','bool','exec','isinstance','ord','sum','bytearray','filter','issubclass','pow','super','bytes','float','iter','print','tuple','callable','format','len','property','type','chr','frozenset','list','range','vars','classmethod','getattr','locals','repr','zip','compile','globals','map','reversed','__import__','complex','hasattr','max','round'
+    ];
+    // Work on raw, then escape and splice spans
+    let out = escapeHtml(src);
+    // Decorators (line start @...)
+    out = out.replace(/(^|\n)(\s*@[^\n]+)/g, (m, a, b) => `${a}<span class="code-token decorator">${b}</span>`);
+    // Triple-quoted strings
+    out = out.replace(/("""[\s\S]*?"""|'''[\s\S]*?''')/g, '<span class="code-token string">$1</span>');
+    // Single/double quoted strings
+    out = out.replace(/("[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')/g, '<span class="code-token string">$1</span>');
+    // Comments
+    out = out.replace(/(#[^\n]*)/g, '<span class="code-token comment">$1</span>');
+    // Numbers
+    out = out.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="code-token number">$1</span>');
+    // Keywords
+    const kwRe = new RegExp('\\b(' + kw.join('|') + ')\\b', 'g');
+    out = out.replace(kwRe, '<span class="code-token keyword">$1</span>');
+    // Builtins
+    const biRe = new RegExp('\\b(' + builtins.join('|') + ')\\b', 'g');
+    out = out.replace(biRe, '<span class="code-token builtin">$1</span>');
+    // def/class names
+    out = out.replace(/\b(def|class)\s+([A-Za-z_][A-Za-z0-9_]*)/g, '<span class="code-token keyword">$1</span> <span class="code-token defname">$2</span>');
+    return out;
+}
+
+function highlightCodeBlock(codeEl) {
+    try {
+        const cls = codeEl.className || '';
+        const lang = (cls.match(/language-([A-Za-z0-9_+-]+)/) || [,''])[1].toLowerCase();
+        const raw = codeEl.textContent || '';
+        let html = null;
+        if (lang === 'python' || lang === 'py') {
+            html = highlightPythonCode(raw);
+        }
+        if (html == null) return; // unknown lang: skip
+        codeEl.innerHTML = html;
+        codeEl.setAttribute('data-local-highlighted', 'true');
+    } catch (_) {}
+}
+
+function highlightCodeBlocks(container) {
+    try {
+        const nodes = (container || document).querySelectorAll('pre code');
+        nodes.forEach(codeEl => {
+            if (codeEl.dataset.localHighlighted === 'true') return;
+            highlightCodeBlock(codeEl);
+        });
+    } catch (_) {}
+}
+
+// Sanitized HTML display mode
+function prestripDangerousHtml(source) {
+    try {
+        let s = String(source || '');
+        // Remove inline event handlers like onload=, onclick=, etc.
+        s = s.replace(/\s+on[a-z-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+        // Remove javascript: URLs from href/src
+        s = s.replace(/\s+(href|src)\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*'|javascript:[^\s>]*)/gi, '');
+        // Remove potentially auto-triggering attributes
+        s = s.replace(/\s+(autofocus|autoplay)\b/gi, '');
+        return s;
+    } catch (_) {
+        return String(source || '');
+    }
+}
+
+function sanitizeHtmlForDisplay(html) {
+    try {
+        const temp = document.createElement('div');
+        // Pre-strip to avoid CSP violations on assignment
+        temp.innerHTML = prestripDangerousHtml(html);
+        // Remove <script> and event handlers
+        temp.querySelectorAll('script').forEach(el => el.remove());
+        // Disable forms and iframes entirely
+        temp.querySelectorAll('form').forEach(el => {
+            const repl = document.createElement('div');
+            repl.innerHTML = el.innerHTML; el.replaceWith(repl);
+        });
+        temp.querySelectorAll('iframe').forEach(el => el.remove());
+        const walker = document.createTreeWalker(temp, NodeFilter.SHOW_ELEMENT, null);
+        while (walker.nextNode()) {
+            const el = walker.currentNode;
+            // Remove on* attributes and javascript: URLs
+            [...el.attributes].forEach(attr => {
+                const n = attr.name.toLowerCase();
+                const v = String(attr.value || '').trim().toLowerCase();
+                if (n.startsWith('on')) el.removeAttribute(attr.name);
+                if ((n === 'href' || n === 'src') && v.startsWith('javascript:')) el.removeAttribute(attr.name);
+                if (n === 'autofocus' || n === 'autoplay') el.removeAttribute(attr.name);
+            });
+        }
+        return temp.innerHTML;
+    } catch (_) {
+        return escapeHtml(String(html || ''));
+    }
+}
+
+// Sanitizer variant for sandboxed JS: keep <script> but strip on* and javascript:
+function sanitizeHtmlForSandboxAllowScripts(html) {
+    try {
+        const temp = document.createElement('div');
+        // Pre-strip inline handlers and javascript: before parsing
+        temp.innerHTML = prestripDangerousHtml(html);
+        // Keep <script> elements; remove src that are not inline (block remote)
+        temp.querySelectorAll('script').forEach(el => {
+            if (el.src) el.removeAttribute('src');
+        });
+        const walker = document.createTreeWalker(temp, NodeFilter.SHOW_ELEMENT, null);
+        while (walker.nextNode()) {
+            const el = walker.currentNode;
+            [...el.attributes].forEach(attr => {
+                const n = attr.name.toLowerCase();
+                const v = String(attr.value || '').trim().toLowerCase();
+                if (n.startsWith('on')) el.removeAttribute(attr.name);
+                if ((n === 'href' || n === 'src') && v.startsWith('javascript:')) el.removeAttribute(attr.name);
+            });
+        }
+        return temp.innerHTML;
+    } catch (_) {
+        return String(html || '');
+    }
+}
+
+function extractHtmlDisplayRule(text) {
+    console.log("extracting html display rule");
+    const s = String(text || '');
+    const m = s.match(/<rule>\s*\{([\s\S]*?)\}\s*<\/rule>/i);
+    if (!m) return { isHtmlMode: false, allowJs: false, content: s };
+    const body = (m[1] || '').trim();
+    // Defaults
+    let displayHtml = false;
+    let allowJs = false;
+    let vpW = null, vpH = null;
+    // Split key:value pairs by comma
+    body.split(/\s*,\s*/).forEach(pair => {
+        const kv = pair.split(/\s*[:=]\s*/);
+        if (kv.length < 2) return;
+        const key = (kv[0] || '').toLowerCase().trim();
+        const val = (kv[1] || '').toLowerCase().trim();
+        if (key === 'displayhtml') {
+            displayHtml = (val === 'true');
+        } else if (key === 'allowjs') {
+            allowJs = (val === 'true');
+        } else if (key === 'viewport') {
+            const m2 = val.match(/^(\d{2,4})x(\d{2,4})$/);
+            if (m2) {
+                vpW = parseInt(m2[1], 10);
+                vpH = parseInt(m2[2], 10);
+            }
+        }
+    });
+    // If displayHtml false, ignore allowJs/viewport
+    if (!displayHtml) return { isHtmlMode: false, allowJs: false, content: s };
+    const after = s.slice(s.indexOf(m[0]) + m[0].length).replace(/^\s*\n?/, '');
+    console.log("html mode is true", { allowJs, viewport: (vpW && vpH) ? { w: vpW, h: vpH } : null });
+    return { isHtmlMode: true, allowJs, viewport: (vpW && vpH) ? { w: vpW, h: vpH } : null, content: after };
+}
+
 const debounce = (fn, ms = 150) => {
   let t; return (...a) => {
     clearTimeout(t); t = setTimeout(() => fn(...a), ms);
@@ -3256,23 +3608,30 @@ function search(query) {
     const appDetectorResult = window.searchDetectors.detectAppSearch(q);
     
     if (appDetectorResult && appDetectorResult.type === 'show_app_suggestions') {
-        const appSuggestions = Object.entries(appDetectorResult.apps).map(([key, appInfo]) => ({
+        // When user typed something like '@c' or '@yt', filter engines by key, name, or alias
+        const atPrefix = q.slice(1).toLowerCase();
+        const engines = Object.entries(appDetectorResult.apps);
+        const filtered = atPrefix
+            ? engines.filter(([key, info]) => {
+                const nameHit = (info.name || '').toLowerCase().includes(atPrefix);
+                const keyHit = key.toLowerCase().includes(atPrefix);
+                const aliasHit = Array.isArray(info.aliases) && info.aliases.some(a => a.replace(/^@/, '').toLowerCase().includes(atPrefix));
+                return nameHit || keyHit || aliasHit;
+              })
+            : engines;
+
+        const appSuggestions = filtered.map(([key, appInfo]) => ({
             type: 'engine_suggestion', // a new type
             title: `Search with ${appInfo.name}`,
             engineKey: key,
-            icon: appInfo.name === 'Google' ? googleIcon : null,
+            icon: appInfo.icon || null,
+            aliases: appInfo.aliases || [],
             domain: new URL(appInfo.url).hostname
         }));
         
-        // Add Google to the top if the query is just "@"
+        // Put Google first for '@' without duplicating
         if (q === '@') {
-            appSuggestions.unshift({
-                type: 'engine_suggestion',
-                title: 'Search with Google',
-                engineKey: 'google',
-                icon: googleIcon,
-                domain: 'google.com'
-            });
+            appSuggestions.sort((a, b) => (a.engineKey === 'google' ? -1 : 0) - (b.engineKey === 'google' ? -1 : 0));
         }
 
         // We have our list, call displayResults directly and bypass ranking
@@ -3285,7 +3644,18 @@ function search(query) {
     const bookmarkPromise = runtimeSendMessage({ action: "searchBookmarks", query: query });
 
     if (!query.trim()) {
-        const promise = tabSearch.then(tabResults => displayResults(tabResults, query));
+        // Empty input: show top Switch to Tab items AND a top AI action
+        const promise = tabSearch.then(tabResults => {
+            // Build a top AI action item for the current page context
+            const aiQuick = {
+                type: 'ai_quick',
+                title: 'Get context for this page (AI)',
+                hint: 'Press Enter to analyze this page deeply',
+            };
+            // Prepend AI quick item to the results
+            const precomputed = [aiQuick, ...tabResults.map(tab => ({ ...tab, type: 'tab', text: tab.title }))];
+            return displayResults(tabResults, query, [], null, precomputed);
+        });
         currentSearchPromise = promise;
         return promise;
     }
@@ -3313,6 +3683,36 @@ function search(query) {
                             }
                         })
                         .filter(result => result !== null && result.type !== 'show_app_suggestions');
+                }
+
+                // Suffix-based engine detection ("<query> youtube" or "<query> gh")
+                const suffixMatch = (query || '').match(/^(.*?)(?:\s+)([a-zA-Z]{1,15})$/);
+                if (suffixMatch) {
+                    const coreQuery = suffixMatch[1].trim();
+                    const suffix = suffixMatch[2].trim().toLowerCase();
+                    // Ignore single-character suffix (too noisy: e.g., trailing 'g')
+                    if (coreQuery && suffix.length >= 2) {
+                        const resolveAlias = (token) => {
+                            if (SEARCH_ENGINES[token]) return token;
+                            for (const [engineKey, info] of Object.entries(SEARCH_ENGINES)) {
+                                if (engineKey === token) return engineKey;
+                                if (Array.isArray(info.aliases) && info.aliases.some(a => a.replace(/^@/, '').toLowerCase() === token)) return engineKey;
+                                if ((info.name || '').toLowerCase() === token) return engineKey;
+                            }
+                            return null;
+                        };
+                        const key = resolveAlias(suffix);
+                        if (key) {
+                            const svc = SEARCH_ENGINES[key];
+                            specialResults.unshift({
+                                type: 'app_search',
+                                app: svc.name,
+                                searchTerm: coreQuery,
+                                url: svc.url + encodeURIComponent(coreQuery),
+                                title: `Search ${svc.name} for "${coreQuery}"`
+                            });
+                        }
+                    }
                 }
 
                 // Always add AI and Google search as fallbacks
@@ -3439,6 +3839,7 @@ function processHistoryResults(historyResults, suggestions, query) {
             if (suggestionTexts.has(key)) continue;
             seenSearchQueries.add(key);
 
+            // Avoid duplicating top-level engine suggestion for plain '@'
             results.push({
                 type: 'google',
                 text: searchText,
@@ -3497,17 +3898,32 @@ searchInput.addEventListener('keydown', (e) => {
     const items = resultsDiv.querySelectorAll('.result-item');
     
     // Handle right arrow for app search autocomplete
-    if (e.key === 'ArrowRight') {
+    if (e.key === 'ArrowRight' || e.key === 'Tab') {
         const currentValue = searchInput.value;
-        const match = currentValue.match(/^@(\\w+)$/i);
+        const caretAtEnd = searchInput.selectionStart === searchInput.selectionEnd && searchInput.selectionEnd === currentValue.length;
+        // Only intercept ArrowRight when caret is at the end
+        if (!caretAtEnd) {
+            return; // let the caret move right normally
+        }
+
+        const match = currentValue.match(/^@(\w+)$/i);
         if (match) {
             const partial = match[1].toLowerCase();
-                         // Find first matching app
-             const apps = ['youtube', 'twitter', 'github', 'reddit', 'stackoverflow', 'amazon', 'ebay', 'bing', 'duckduckgo', 'netflix', 'spotify', 'linkedin', 'maps', 'drive', 'gmail'];
-            const matchingApp = apps.find(app => app.startsWith(partial));
-            if (matchingApp) {
+            // Use SEARCH_ENGINES keys, names, and aliases for autocompletion
+            let matchingKey = null;
+            for (const [engineKey, info] of Object.entries(SEARCH_ENGINES)) {
+                const nameStarts = (info.name || '').toLowerCase().startsWith(partial);
+                const keyStarts = engineKey.startsWith(partial);
+                const aliasExact = Array.isArray(info.aliases) && info.aliases.some(a => a.replace(/^@/, '').toLowerCase() === partial);
+                const aliasStarts = Array.isArray(info.aliases) && info.aliases.some(a => a.replace(/^@/, '').toLowerCase().startsWith(partial));
+                if (aliasExact || nameStarts || keyStarts || aliasStarts) {
+                    matchingKey = engineKey;
+                    break;
+                }
+            }
+            if (matchingKey) {
                 e.preventDefault();
-                searchInput.value = `@${matchingApp} `;
+                searchInput.value = `@${matchingKey} `;
                 search(searchInput.value);
                 return;
             }
@@ -3515,7 +3931,7 @@ searchInput.addEventListener('keydown', (e) => {
         
         // Handle autocomplete for selected result
         if (selectedIndex >= 0 && selectedIndex < currentResults.length) {
-            const selectedResult = currentResults[selectedIndex];
+            const selectedResult = items[selectedIndex] && items[selectedIndex].__result ? items[selectedIndex].__result : currentResults[selectedIndex];
             e.preventDefault();
             
             if (selectedResult.type === 'navigation') {
@@ -3568,7 +3984,7 @@ searchInput.addEventListener('keydown', (e) => {
                 // Re-get items after search completes
                 const updatedItems = resultsDiv.querySelectorAll('.result-item');
                 if (selectedIndex >= 0 && selectedIndex < updatedItems.length) {
-                    const selectedResult = currentResults[selectedIndex];
+                    const selectedResult = updatedItems[selectedIndex] && updatedItems[selectedIndex].__result ? updatedItems[selectedIndex].__result : currentResults[selectedIndex];
                     
                     // Special handling for rerollable items
                     if (selectedResult.isRerollable && (selectedResult.type === 'coin_flip' || selectedResult.type === 'roll_die' || selectedResult.type === 'random_number')) {
@@ -3590,14 +4006,31 @@ searchInput.addEventListener('keydown', (e) => {
                         return;
                     }
                     
+                    const openInNewTab = e.shiftKey !== true; // default: new tab; Shift: current tab
                     if (selectedResult.type === 'suggestion') {
-                        runtimeSendMessage({ action: "createTab", url: `https://www.google.com/search?q=${encodeURIComponent(selectedResult.text)}` });
+                        const url = `https://www.google.com/search?q=${encodeURIComponent(selectedResult.text)}`;
+                        runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url });
+                    } else if (selectedResult.type === 'google') {
+                        const url = `https://www.google.com/search?q=${encodeURIComponent(selectedResult.query || selectedResult.text || '')}`;
+                        runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url });
+                    } else if (selectedResult.type === 'app_search') {
+                        const url = selectedResult.url;
+                        runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url });
+                    } else if (selectedResult.type === 'navigation') {
+                        const url = selectedResult.url;
+                        runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url });
+                    } else if (selectedResult.type === 'tab') {
+                        updatedItems[selectedIndex].click();
+                    } else if (selectedResult.type === 'ai') {
+                        // AI remains in current pane; click handler triggers chat
+                        updatedItems[selectedIndex].click();
                     } else {
                         updatedItems[selectedIndex].click();
                     }
                 } else if (currentQuery.trim()) {
                     // If no results or invalid selection, search Google for the current query
-                    runtimeSendMessage({ action: "createTab", url: `https://www.google.com/search?q=${encodeURIComponent(currentQuery)}` });
+                    const openInNewTab = e.shiftKey !== true; // default: new tab; Shift: current tab
+                    runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url: `https://www.google.com/search?q=${encodeURIComponent(currentQuery)}` });
                 }
             });
             break;
@@ -3874,6 +4307,8 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
                 det.className = 'debug-section debug-thinking';
                 det.id = thinkId;
                 det.innerHTML = `<summary><span class="debug-label">Thinking… (click to expand)</span></summary><div class="debug-content thinking-content"></div>`;
+                det.open = false;
+                det.dataset.thinkingOpen = 'false';
                 panelsWrap.prepend(det);
             }
             if (!togglesWrap.querySelector(`[data-target="${thinkId}"]`)) {
@@ -3886,6 +4321,8 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
                     const sec = panelsWrap.querySelector(`#${thinkId}`);
                     if (sec) sec.open = !sec.open;
                     btn.classList.toggle('active', sec && sec.open);
+                    const d = panelsWrap.querySelector(`#${thinkId}`);
+                    if (d) d.dataset.thinkingOpen = d.open ? 'true' : 'false';
                 });
                 togglesWrap.prepend(btn);
             }
@@ -3937,15 +4374,20 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
         }
         // Initial update immediately
         tick();
-        // Keep open during entire turn
-        details.open = true;
+        // Default closed at start of a turn; preserve user toggle across tool chains
+        if (!('thinkingOpen' in details.dataset)) {
+            details.dataset.thinkingOpen = 'false';
+        }
+        details.open = details.dataset.thinkingOpen === 'true';
     }
     function labelForTool(name, args) {
         const n = String(name || '').toLowerCase();
         if (n.includes('multi') && n.includes('search')) return 'Searching the web';
         if (n.includes('jina')) {
-            const t = (args && (args.type || args.arguments?.type)) ? String(args.type || args.arguments?.type).toLowerCase() : '';
-            if (t.includes('read')) return 'Reading article';
+            const a = (typeof args === 'string') ? (() => { try { return JSON.parse(args) } catch (_) { return {} } })() : (args || {});
+            const t = (a && (a.type || a.arguments?.type)) ? String(a.type || a.arguments?.type).toLowerCase() : '';
+            const url = (a && (a.url || a.link)) ? (a.url || a.link) : (Array.isArray(a.queries) && a.queries[0]) || '';
+            if (t.includes('read')) return url ? `Reading: ${url}` : 'Reading article';
             if (t.includes('search')) return 'Searching the web';
             return 'Fetching content';
         }
@@ -3994,7 +4436,9 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
     function addToolChipPanel(name, args, panelId) {
         const isSearch = String(name || '').toLowerCase().includes('search');
         const q = getSearchQuery(args);
-        const label = isSearch ? (q ? `Searching for “${q}”` : 'Searching the web') : prettyToolName(name || 'Tool');
+        // Prefer contextual label based on tool + args
+        const contextual = labelForTool(name, args);
+        const label = contextual || (isSearch ? (q ? `Searching for " ${q}"` : 'Searching the web') : prettyToolName(name || 'Tool'));
 
         // If we have a bubble flow, append tool block inline in chronological order
         if (details && details.classList && details.classList.contains('thinking-bubble')) {
@@ -4012,6 +4456,10 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
             `;
             const flow = details.querySelector('.thinking-flow');
             (flow || details).appendChild(det);
+            // Keep the thinking bubble's open/closed state consistent with user choice
+            if (details && details.dataset && 'thinkingOpen' in details.dataset) {
+                details.open = details.dataset.thinkingOpen === 'true';
+            }
             const contentEl = det.querySelector('.tool-content');
             if (isSearch && q) {
                 contentEl.innerHTML = parseMarkdown(`Searching for:\n\n- ${q}`);
@@ -4163,7 +4611,7 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
                                 answerEl.innerHTML = parseMarkdown(stripInvisible(fullText));
                             }
                         }
-                        // Mark boundary so subsequent thinking chunks don’t merge with prior ones
+                        // Mark boundary so subsequent thinking chunks don't merge with prior ones
                         lastBlockType = 'tool';
                         // Record pending call for later tool_result association
                         if (tokenObj.id) state.pendingCalls.set(tokenObj.id, { name: tokenObj.name, arguments: tokenObj.arguments });
@@ -4239,11 +4687,17 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
             // On final completion (no chaining), finalize label and stop timer
             if (details && !chaining) {
                 const start = Number(details.dataset.startTs || Date.now());
-                const sec = Math.max(0, Math.round((Date.now() - start) / 1000));
+                const sec = Math.max(0, (Math.round((Date.now() - start) / 1000) - 2 ));
                 const lbl = details.querySelector('.thinking-label');
                 const dlbl = details.querySelector('.debug-label');
-                if (lbl) lbl.textContent = `Thought for ${sec} second${sec === 1 ? '' : 's'}`;
-                if (dlbl) dlbl.textContent = `Thought for ${sec} second${sec === 1 ? '' : 's'}`;
+                let promptText;
+                if (sec < 3) {
+                    promptText = "Thought for a few seconds...";
+                } else {
+                    promptText = `Thought for ${sec} second${sec === 1 ? '' : 's'}`;
+                }
+                if (lbl) lbl.textContent = promptText;
+                if (dlbl) dlbl.textContent = promptText;
                 if (details.dataset.timerId) {
                     try { clearInterval(Number(details.dataset.timerId)); } catch (_) {}
                     delete details.dataset.timerId;
@@ -4254,6 +4708,7 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
                 const finalText = stripThink(fullText || (msg.error ? `Error: ${msg.error}` : ''));
                 if (answerEl) {
                     answerEl.innerHTML = parseMarkdown(stripInvisible(finalText));
+                    try { postRenderEnhancements(thinkingEl); } catch (_) {}
                 } else {
                     updateAiMessage(thinkingEl, stripInvisible(finalText));
                 }
@@ -4284,7 +4739,7 @@ function appendMessage(text, type, container, isThinking = false) {
     message.className = `chat-message ${type}-message`;
     if (type === 'ai' && isThinking) {
         message.innerHTML = `
-            <details class="thinking-bubble">
+            <details class="thinking-bubble" data-thinking-open="false">
                 <summary><span class="thinking-label">Thinking… (click to expand)</span></summary>
                 <div class="thinking-flow"></div>
             </details>

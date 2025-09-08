@@ -40,21 +40,54 @@
     return fn(controller.signal).finally(() => clearTimeout(timer));
   }
 
+  // Best-effort resolver for aggregator/redirect URLs (e.g., news.google.com → publisher)
+  const REDIRECTOR_HOSTS = new Set([
+    'news.google.com', 't.co', 'lnkd.in', 'bit.ly', 'tinyurl.com', 'feedproxy.google.com', 'apple.news'
+  ]);
+  const resolveCache = (self.__redirectResolveCache = self.__redirectResolveCache || new Map());
+  function isRedirector(url) {
+    try { const h = new URL(String(url)).hostname.replace(/^www\./i, ''); return REDIRECTOR_HOSTS.has(h); } catch (_) { return false; }
+  }
+  async function resolveFinalUrl(startUrl, timeoutMs = 8000) {
+    const key = 'R:' + String(startUrl || '');
+    if (resolveCache.has(key)) return resolveCache.get(key);
+    try {
+      const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : 'Mozilla/5.0 (X11; Linux x86_64)';
+      const lang = (typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US,en;q=0.9';
+      const finalUrl = await withTimeout(async (signal) => {
+        const r = await fetch(startUrl, { method: 'GET', redirect: 'follow', signal, headers: { 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'User-Agent': ua, 'Accept-Language': lang } });
+        return (r && r.url) ? r.url : String(startUrl);
+      }, timeoutMs);
+      resolveCache.set(key, finalUrl);
+      return finalUrl;
+    } catch (_) {
+      return String(startUrl);
+    }
+  }
+
+  async function fetchReaderSingle(url, apiKey) {
+    const res = await fetchReaderText(url, DEFAULT_TIMEOUT, apiKey);
+    return res;
+  }
+
   async function fetchReaderText(url, timeoutMs = DEFAULT_TIMEOUT, apiKey = '') {
     try {
       let target = String(url || '').trim();
       if (!/^https?:\/\//i.test(target)) target = 'https://' + target;
+      // Drop common tracking parameters
+      try {
+        const u = new URL(target);
+        ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','fbclid'].forEach(k => u.searchParams.delete(k));
+        target = u.toString();
+      } catch (_) { /* noop */ }
       if (cache.has(target)) return { ok: true, text: cache.get(target), cached: true };
-      const headers = {
-        'Content-Type': 'application/json',
-        'X-Retain-Images': 'none',
-        'X-With-Links-Summary': 'all'
-      };
+      // Simple, reliable request: plain GET to r.jina.ai/<URL> (no SSE headers)
+      const headers = {};
       if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-      const body = JSON.stringify({ url: target });
+      const readerUrl = 'https://r.jina.ai/' + target;
       const resText = await withTimeout(
-        (signal) => fetch('https://r.jina.ai/', { method: 'POST', headers, body, signal })
-          .then(r => r.ok ? r.text() : null),
+        (signal) => fetch(readerUrl, { method: 'GET', headers, signal })
+          .then(r => r && r.ok ? r.text() : null),
         timeoutMs
       );
       if (!resText) return { ok: false, error: 'fetch_failed' };
@@ -230,35 +263,50 @@
       },
       required: ['queries']
     },
-    async execute({ type = 'read', queries = [], api_key = '' }) {
+    async execute({ type = 'read', queries = [], api_key = '', url, urls, link, links, query } = {}) {
       const op = (String(type || 'read').toLowerCase() === 'search') ? 'search' : 'read';
       console.log('[JinaTool] execute start', { op, qCount: Array.isArray(queries) ? queries.length : 0 });
 
-      if (!Array.isArray(queries) || queries.length === 0) return { error: 'no_queries' };
+      // Normalize inputs → queries[]
+      let qList = [];
+      if (Array.isArray(queries) && queries.length) qList = queries.slice(0, 10);
+      else if (typeof queries === 'string' && queries.trim()) qList = [queries.trim()];
+      else if (Array.isArray(urls) && urls.length) qList = urls.filter(x => typeof x === 'string' && x.trim()).slice(0, 10);
+      else if (Array.isArray(links) && links.length) qList = links.filter(x => typeof x === 'string' && x.trim()).slice(0, 10);
+      else if (typeof url === 'string' && url.trim()) qList = [url.trim()];
+      else if (typeof link === 'string' && link.trim()) qList = [link.trim()];
+      else if (typeof query === 'string' && query.trim()) qList = [query.trim()];
+
+      if (!Array.isArray(qList) || qList.length === 0) return { error: 'no_queries' };
 
       if (op === 'search') {
         const key = api_key || await getJinaApiKey().catch(() => '');
         if (!key) return { error: 'missing_api_key' };
         const results = [];
-        for (const q of queries) {
+        for (const q of qList) {
           const r = await jinaSearchOnce(q, key);
           results.push({ query: q, ...r });
         }
         console.log('[JinaTool] search done', { count: results.length });
-        return { mode: 'search', results, meta: { tool: 'jina', queries: queries.length } };
+        return { mode: 'search', results, meta: { tool: 'jina', queries: qList.length } };
       }
 
       // read mode → summarize via Jina Reader
       const apiKey = api_key || await getJinaApiKey().catch(() => '');
       const out = [];
-      for (const raw of queries) {
+      for (const raw of qList) {
         if (!raw || typeof raw !== 'string') continue;
-        const r = await fetchReaderText(raw, undefined, apiKey);
+        // Resolve known redirector URLs to the final publisher link first
+        let target = raw;
+        if (isRedirector(raw)) {
+          try { target = await resolveFinalUrl(raw, 8000); } catch (_) { target = raw; }
+        }
+        const r = await fetchReaderSingle(target, apiKey);
         if (!r.ok) { out.push({ url: raw, status: 'error', error: r.error || 'unknown_error' }); continue; }
         const md = r.text || '';
         const title = extractTitle(md);
         const summary = summarize(md);
-        out.push({ url: raw, status: 'ok', title: title || null, summary, excerpt: (normalizeMarkdown(md).slice(0, 280) || ''), full_text: md, bytes: md.length, cached: !!r.cached, via: 'r.jina.ai' });
+        out.push({ url: target, status: 'ok', title: title || null, summary, excerpt: (normalizeMarkdown(md).slice(0, 280) || ''), full_text: md, bytes: md.length, cached: !!r.cached, via: 'r.jina.ai' });
       }
       console.log('[JinaTool] read done', { count: out.length });
       return { mode: 'read', summaries: out, meta: { tool: 'jina', links: out.length } };

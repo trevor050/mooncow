@@ -43,8 +43,8 @@
 
     // Base category priority (higher = better)
     const CATEGORY_BASE = {
+        app_search: 15000,
         quick_answer: 12000,     // calc, convert etc.
-        app_search: 10000,
         navigation: 9800,
         google: 9700,            // Google search as a primary action
         pinned_tab: 9600,
@@ -310,6 +310,8 @@
         let prelim = cands.filter(c => {
             // For navigation, keep for now; later scoring may drop
             if (c.type === 'navigation') return true;
+            // Never drop explicit app searches; these are user-intent picks
+            if (c.type === 'app_search') return true;
             // Tabs must pass strict title/URL prefix or equality
             if (c.type === 'tab') {
                 return strictTabMatchFields(c.title || c.text || '', c.url || '', query) > 0;

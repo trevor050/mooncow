@@ -105,10 +105,11 @@ self.MultiSourceSearchTool = {
       includeArchives_Provenance: { type: "boolean", default: false },
       includeLocation_Geo: { type: "boolean", default: false }
     ,includeJinaSearch: { type: "boolean", default: false, description: "If true, run Jina Search (s.jina.ai) for extra discovery; disabled by default." }
+    ,includeGoogleWeb: { type: "boolean", default: false, description: "If true, query Google Custom Search (requires API key and CX)." }
     },
     required: ["queries"]
   },
-  async execute({ queries, includeCoding=false, codingRelated=false, client_profile=null, includeNews_Current_Events=false, includeLegal_Gov=false, includeResearch_Scholarly=false, includeSocial_Dev=false, includeOpen_Data_Stats=false, includeArchives_Provenance=false, includeLocation_Geo=false, includeJinaSearch=false }) {
+  async execute({ queries, includeCoding=false, codingRelated=false, client_profile=null, includeNews_Current_Events=false, includeLegal_Gov=false, includeResearch_Scholarly=false, includeSocial_Dev=false, includeOpen_Data_Stats=false, includeArchives_Provenance=false, includeLocation_Geo=false, includeJinaSearch=false, includeGoogleWeb=false }) {
     // Normalize alias
     const coding = Boolean(includeCoding || codingRelated);
     const cache = new Map();
@@ -166,6 +167,131 @@ self.MultiSourceSearchTool = {
         return { ok: true, status: res.status, text };
       } catch (e) {
         return { ok: false, status: 0, error: 'jina_search_error' };
+      }
+    };
+
+    // Google Custom Search (Programmable Search Engine) — requires API key and CX
+    const HARDCODED_GOOGLE_SEARCH_API_KEY = 'AIzaSyCRVIF-2R7-b55Ekbn012z9QpI4roxZ24U';
+    const HARDCODED_GOOGLE_CSE_CX = 'a40dd10151c374368';
+    const getGoogleSearchApiKey = async () => {
+      try {
+        const stored = await (typeof browser !== 'undefined' && browser.storage?.local?.get
+          ? browser.storage.local.get('GOOGLE_SEARCH_API_KEY')
+          : (typeof chrome !== 'undefined' && chrome.storage?.local?.get
+            ? new Promise(res => chrome.storage.local.get('GOOGLE_SEARCH_API_KEY', res))
+            : Promise.resolve({})));
+        const key = stored?.GOOGLE_SEARCH_API_KEY || HARDCODED_GOOGLE_SEARCH_API_KEY || '';
+        return key;
+      } catch (_) { return HARDCODED_GOOGLE_SEARCH_API_KEY || ''; }
+    };
+    const getGoogleCseCx = async () => {
+      try {
+        const stored = await (typeof browser !== 'undefined' && browser.storage?.local?.get
+          ? browser.storage.local.get('GOOGLE_CSE_CX')
+          : (typeof chrome !== 'undefined' && chrome.storage?.local?.get
+            ? new Promise(res => chrome.storage.local.get('GOOGLE_CSE_CX', res))
+            : Promise.resolve({})));
+        const cx = stored?.GOOGLE_CSE_CX || HARDCODED_GOOGLE_CSE_CX || '';
+        return cx;
+      } catch (_) { return HARDCODED_GOOGLE_CSE_CX || ''; }
+    };
+    const googleCseSearch = async (query, ms) => {
+      try {
+        const [key, cx] = await Promise.all([getGoogleSearchApiKey(), getGoogleCseCx()]);
+        if (!key || !cx) return { ok: false, status: 0, error: 'missing_key_or_cx' };
+        const params = new URLSearchParams({
+          q: String(query || '').trim(),
+          key,
+          cx,
+          num: '10',
+          gl: 'us',
+          hl: 'en',
+          safe: 'off',
+          prettyPrint: 'false',
+          // Return only the fields we actually use to cut payload
+          fields: 'items(title,link,snippet,displayLink),searchInformation(totalResults)'
+        });
+        // Use official endpoint (works cross-origin with proper host permissions)
+        const url = `https://www.googleapis.com/customsearch/v1?${params.toString()}`;
+        const api = await getJson(url, ms ?? DEFAULT_TIMEOUT);
+        if (!api || !Array.isArray(api.items)) return { ok: false, status: 0, error: 'no_items' };
+        const items = api.items.map(it => ({
+          title: it.title || '',
+          link: it.link || it.formattedUrl || '',
+          snippet: it.snippet || it.htmlSnippet || '',
+          displayLink: it.displayLink || '',
+          favicon: it.displayLink ? `https://www.google.com/s2/favicons?domain=${it.displayLink}&sz=32` : ''
+        }));
+        const totalResults = Number(api?.searchInformation?.totalResults || 0);
+        return { ok: true, status: 200, items, totalResults };
+      } catch (e) {
+        return { ok: false, status: 0, error: 'google_cse_error' };
+      }
+    };
+    const parseHtmlText = (html) => String(html || '').replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ');
+    const stripTags = (s) => String(s || '').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+    const decodeHtml = (s) => String(s || '')
+      .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+    const googleHtmlSearch = async (query, ms) => {
+      try {
+        const q = String(query || '').trim();
+        const base = `hl=en&gl=US&pws=0&num=10&q=${encodeURIComponent(q)}`;
+        const variants = [
+          `https://www.google.com/search?${base}`,
+          `https://www.google.com/search?${base}&igu=1`,
+          `https://www.google.com/search?${base}&udm=14`
+        ];
+
+        const shouldDrop = (u) => {
+          try {
+            const h = new URL(u).hostname.replace(/^www\./,'').toLowerCase();
+            const drop = ['google.com','webcache.googleusercontent.com','translate.google.com','policies.google.com','support.google.com','accounts.google.com'];
+            return drop.some(d => h === d || h.endsWith('.' + d));
+          } catch (_) { return true; }
+        };
+
+        const extractItems = (html) => {
+          const cleaned = parseHtmlText(html);
+          if (/consent\.google\.com|Before you continue to Google/i.test(cleaned)) return [];
+          const out = [];
+          const seen = new Set();
+          const anchorRe = /<a\s+[^>]*href=\"\/url\?q=([^\"&]+)[^\"]*\"[^>]*>/gi;
+          let m;
+          while ((m = anchorRe.exec(cleaned)) && out.length < 10) {
+            try {
+              const link = decodeURIComponent(m[1]);
+              if (!link || shouldDrop(link)) continue;
+              // Try to find a nearby <h3> for title (forward window first)
+              let title = '';
+              const forward = cleaned.slice(anchorRe.lastIndex, anchorRe.lastIndex + 1500);
+              const f = forward.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+              if (f && f[1]) title = decodeHtml(stripTags(f[1]));
+              if (!title) {
+                const back = cleaned.slice(Math.max(0, m.index - 800), m.index);
+                const b = back.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+                if (b && b[1]) title = decodeHtml(stripTags(b[1]));
+              }
+              let displayLink = '';
+              try { displayLink = new URL(link).hostname.replace(/^www\./,''); } catch(_) {}
+              const key = link;
+              if (!seen.has(key)) {
+                seen.add(key);
+                out.push({ title: title || displayLink || link, link, snippet: '', displayLink, favicon: displayLink ? `https://www.google.com/s2/favicons?domain=${displayLink}&sz=32` : '' });
+              }
+            } catch (_) { /* ignore bad anchors */ }
+          }
+          return out;
+        };
+
+        for (const url of variants) {
+          const html = await getText(url, ms ?? DEFAULT_TIMEOUT);
+          if (!html) continue;
+          const items = extractItems(html);
+          if (items.length) return { ok: true, status: 200, items };
+        }
+        return { ok: false, status: 200, error: 'no_results' };
+      } catch (e) {
+        return { ok: false, status: 0, error: 'google_html_error' };
       }
     };
 
@@ -325,6 +451,21 @@ self.MultiSourceSearchTool = {
           const js = await jinaSearch(q).catch(() => null);
           if (js && (js.data || js.text || js.ok === false)) {
             sources.jina_search = js;
+          }
+        } catch (_) {}
+      }
+
+      // Optional Google Web Search via Custom Search (requires key+cx). Best-effort; skip silently if misconfigured.
+      if (includeGoogleWeb) {
+        try {
+          let g = await googleCseSearch(q).catch(() => null);
+          if (!g || g.error || !Array.isArray(g.items) || g.items.length === 0) {
+            // Fallback: HTML scrape (best-effort)
+            const gh = await googleHtmlSearch(q).catch(() => null);
+            if (gh && (Array.isArray(gh.items) || gh.error)) sources.google_web = gh;
+            else if (g) sources.google_web = g;
+          } else {
+            sources.google_web = g;
           }
         } catch (_) {}
       }
