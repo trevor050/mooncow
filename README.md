@@ -20,8 +20,8 @@ Tired of Arc hogging all the AI browser features? This Zen mod gives you everyth
 
 ## 🎯 Quick Start
 
-### 1. Get OpenRouter Setup
-1. Head to [OpenRouter](https://openrouter.ai) and grab an API key
+### 1. Get Cerebras Setup
+1. Head to [Cerebras](https://cerebras.com) and grab an API key
 2. Pick your model (GPT-4o, Claude, Llama - whatever floats your boat)
 
 ### 2. Install in Zen
