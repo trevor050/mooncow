@@ -1,10 +1,10 @@
 /*
 const fetch = require('node-fetch');
 
-fetch('https://r.jina.ai/https://www.example.com', { //Jina Reader API, input any URL return cleaned text
+fetch('https://r.jina.ai/https://www.example.com', { // Jina Reader API, input any URL return cleaned text
     method: 'GET',
     headers: {
-        'Authorization': 'Bearer REDACTED_JINA_KEY',
+        // Set at runtime: 'Authorization': 'Bearer <YOUR_JINA_API_KEY>',
         'X-Engine': 'direct',
         'X-Retain-Images': 'none',
         'X-With-Links-Summary': 'all'
@@ -18,7 +18,7 @@ fetch('https://r.jina.ai/https://www.example.com', { //Jina Reader API, input an
 
 /*
 curl "https://s.jina.ai/" \
-  -H "Authorization: Bearer REDACTED_JINA_KEY-TFUd4FTeYrS" \
+  -H "Authorization: Bearer <YOUR_JINA_API_KEY>" \
   -H "Content-Type: application/json" \
   -H "X-Respond-With: no-content" \
   -d @- <<EOFEOF

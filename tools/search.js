@@ -137,7 +137,7 @@ self.MultiSourceSearchTool = {
     // SearXNG integration removed due to unreliable public instances from this environment.
 
     // Best-effort Jina Search wrapper (s.jina.ai). Requires API key; skip silently if missing.
-    const HARDCODED_JINA_API_KEY = 'REDACTED_JINA_KEY';
+    const HARDCODED_JINA_API_KEY = '';
     const getJinaApiKey = async () => {
       try {
         const stored = await (typeof browser !== 'undefined' && browser.storage?.local?.get
@@ -171,8 +171,8 @@ self.MultiSourceSearchTool = {
     };
 
     // Google Custom Search (Programmable Search Engine) — requires API key and CX
-    const HARDCODED_GOOGLE_SEARCH_API_KEY = 'REDACTED_GOOGLE_KEY';
-    const HARDCODED_GOOGLE_CSE_CX = 'a40dd10151c374368';
+    const HARDCODED_GOOGLE_SEARCH_API_KEY = '';
+    const HARDCODED_GOOGLE_CSE_CX = '';
     const getGoogleSearchApiKey = async () => {
       try {
         const stored = await (typeof browser !== 'undefined' && browser.storage?.local?.get
