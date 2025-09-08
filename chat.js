@@ -1,7 +1,6 @@
 // API key handling: prefer extension storage; fall back to hardcoded (dev only)
 console.log('[CerebrasChat] chat.js loaded');
 // You can get a free key from: https://www.cerebras.ai/get-api-key/
-const HARDCODED_CEREBRAS_API_KEY = 'csk-mpt6t36mewrrpnfy2jxy2k5mr89vm826njk3fmtm22j48ert';
 
 async function getApiKey() {
     try {
@@ -10,13 +9,10 @@ async function getApiKey() {
             : (typeof chrome !== 'undefined' && chrome.storage?.local?.get
                 ? new Promise(res => chrome.storage.local.get('CEREBRAS_API_KEY', res))
                 : Promise.resolve({})))
-        const key = stored?.CEREBRAS_API_KEY || HARDCODED_CEREBRAS_API_KEY;
+        const key = stored?.CEREBRAS_API_KEY || '';
         if (!key || key.includes('YOUR_CEREBRAS_API_KEY')) throw new Error('Missing Cerebras API Key');
         return key;
     } catch (_) {
-        if (HARDCODED_CEREBRAS_API_KEY && !HARDCODED_CEREBRAS_API_KEY.includes('YOUR_CEREBRAS_API_KEY')) {
-            return HARDCODED_CEREBRAS_API_KEY;
-        }
         throw new Error('Missing Cerebras API Key');
     }
 }

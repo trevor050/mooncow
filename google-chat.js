@@ -1,7 +1,7 @@
 // Google AI implementation for Mooncow
 // Get your free API key from: https://aistudio.google.com/app/apikey
 
-const GOOGLE_API_KEY = 'AIzaSyAI4u2UV3fa7-UB5Ox7WGW1c8LYb_3NXUk'; // Replace with your actual API key
+let GOOGLE_API_KEY = '';
 const GOOGLE_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 const GOOGLE_MODEL_FALLBACK_LIST = [
@@ -18,7 +18,17 @@ const GOOGLE_MODEL_FALLBACK_LIST = [
  * @returns {Promise<Response>} The fetch Response object.
  */
 async function executeGoogleAIRequest(messages, options, stream = false) {
-    if (!GOOGLE_API_KEY || GOOGLE_API_KEY.includes('YOUR_GOOGLE_API_KEY')) {
+    try {
+        const stored = await (typeof browser !== 'undefined' && browser.storage?.local?.get
+            ? browser.storage.local.get('GOOGLE_API_KEY')
+            : (typeof chrome !== 'undefined' && chrome.storage?.local?.get
+                ? new Promise(res => chrome.storage.local.get('GOOGLE_API_KEY', res))
+                : Promise.resolve({}))); 
+        GOOGLE_API_KEY = stored?.GOOGLE_API_KEY || '';
+    } catch (_) {
+        GOOGLE_API_KEY = '';
+    }
+    if (!GOOGLE_API_KEY) {
         throw new Error('Missing Google API Key');
     }
 

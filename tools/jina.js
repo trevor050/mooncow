@@ -18,8 +18,8 @@
     'the','and','a','an','of','to','in','for','on','at','by','from','as','that','this','these','those','is','are','was','were','be','been','being','with','it','its','or','if','but','about','into','through','over','after','before','between','down','up','out','off','than','then','so','such','can','could','should','would','may','might','will','just','also','not','no','yes','you','your','we','our','they','their','he','she','his','her','them','us'
   ]);
 
-  // API key (storage first, fallback to hardcoded)
-  const HARDCODED_JINA_API_KEY = 'jina_16d64a38654443bd8f6bae0056136a0a2jMsoYZ9JQWo1501eyIIK1SJLxs5';
+  // API key (storage only — no hardcoded default)
+  const HARDCODED_JINA_API_KEY = '';
   async function getJinaApiKey() {
     try {
       const stored = await (typeof browser !== 'undefined' && browser.storage?.local?.get

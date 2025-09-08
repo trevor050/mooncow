@@ -619,6 +619,37 @@ body.chat-active .search-container {
     padding: 4px;
 }
 
+/* Settings button mirrors expand button but sits on the right */
+.chat-settings-button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: auto;
+    height: auto;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    z-index: 10;
+    line-height: 1;
+    padding: 4px;
+}
+
+.chat-settings-button:hover {
+    color: rgba(255, 255, 255, 0.8);
+    transform: scale(1.1);
+}
+
+.chat-settings-button:active {
+    transform: scale(0.95);
+}
+
 .chat-expand-button:hover {
     color: rgba(255, 255, 255, 0.8);
     transform: scale(1.1);

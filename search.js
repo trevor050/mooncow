@@ -1066,6 +1066,13 @@ function switchToChatSession(chatId) {
         closeButton.onclick = closeChatTile;
         chatTileContainer.appendChild(closeButton);
 
+        const settingsButton = document.createElement('button');
+        settingsButton.className = 'chat-settings-button';
+        settingsButton.title = 'Settings';
+        settingsButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0A1.65 1.65 0 0 0 9 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0A1.65 1.65 0 0 0 21 12h.09a2 2 0 1 1 0 4H21a1.65 1.65 0 0 0-1.51 1Z"/></svg>`;
+        settingsButton.onclick = openSettingsPanel;
+        chatTileContainer.appendChild(settingsButton);
+
         const expandButton = document.createElement('button');
         expandButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
@@ -1136,7 +1143,7 @@ function switchToChatSession(chatId) {
                     chatHistory.scrollTop = chatHistory.scrollHeight;
 
                     // Start streaming tokens instead of waiting for full response
-                    startStreaming(aiProvider, conversation, thinkingFollowupEl);
+                    beginStreamingWithKeyCheck(aiProvider, conversation, thinkingFollowupEl);
                 }
             }
         };
@@ -1258,6 +1265,164 @@ function initializeAIProviderToggle() {
     updateAIProviderToggle();
 }
 
+
+// Settings and API key helpers
+async function getStored(keys) {
+    try {
+        if (typeof browser !== 'undefined' && browser.storage?.local?.get) {
+            return await browser.storage.local.get(keys);
+        }
+        if (typeof chrome !== 'undefined' && chrome.storage?.local?.get) {
+            return await new Promise(res => chrome.storage.local.get(keys, res));
+        }
+    } catch (_) {}
+    return {};
+}
+
+async function checkMissingKeyForProvider(provider) {
+    const need = provider === 'google' ? ['GOOGLE_API_KEY'] : ['CEREBRAS_API_KEY'];
+    const stored = await getStored(need);
+    for (const k of need) {
+        const v = stored?.[k];
+        if (!v || typeof v !== 'string' || !v.trim()) return k; // return missing key name
+    }
+    return null;
+}
+
+function showMissingKeyMessage(provider, thinkingEl) {
+    const wrap = thinkingEl || document.createElement('div');
+    const k = provider === 'google' ? 'Google (Gemini)' : 'Cerebras';
+    const help = provider === 'google'
+        ? 'No Google Gemini API key found. Add a free key in Settings.'
+        : 'No Cerebras API key found. Add a free key in Settings.';
+    const links = provider === 'google'
+        ? '<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Get a Gemini key</a> — free tiers: 100/day (2.5 Pro), 250/day (2.5 Flash), 1000/day (2.5 Flash-lite), 14,400/day (Gemma 3).'
+        : '<a href="https://inference-docs.cerebras.ai/quickstart" target="_blank" rel="noreferrer">Get a Cerebras key</a> — free up to ~14k chats/day or ~1M tokens.';
+    const btn = document.createElement('button');
+    btn.textContent = 'Open Settings';
+    btn.style.cssText = 'background:#2563eb;border:none;color:#fff;padding:6px 10px;border-radius:8px;cursor:pointer;margin-top:8px;';
+    btn.onclick = openSettingsPanel;
+    wrap.innerHTML = `<div class="chat-thinking"><div style="margin-bottom:6px;"><strong>${k} key missing.</strong> ${help}</div><div>${links}</div></div>`;
+    wrap.appendChild(btn);
+}
+
+async function beginStreamingWithKeyCheck(provider, conversation, thinkingEl) {
+    const missing = await checkMissingKeyForProvider(provider);
+    if (missing) {
+        showMissingKeyMessage(provider, thinkingEl);
+        return;
+    }
+    startStreaming(provider, conversation, thinkingEl);
+}
+
+function openSettingsPanel() {
+    let panel = document.getElementById('mooncow-settings-panel');
+    if (panel) { panel.style.display = 'block'; return; }
+    panel = document.createElement('div');
+    panel.id = 'mooncow-settings-panel';
+    panel.style.position = 'fixed';
+    panel.style.top = '60px';
+    panel.style.right = '12px';
+    panel.style.width = '360px';
+    panel.style.maxHeight = '70vh';
+    panel.style.overflow = 'auto';
+    panel.style.background = '#111827';
+    panel.style.color = '#e5e7eb';
+    panel.style.border = '1px solid #374151';
+    panel.style.borderRadius = '10px';
+    panel.style.boxShadow = '0 8px 24px rgba(0,0,0,.35)';
+    panel.style.zIndex = '2147483647';
+    panel.style.padding = '14px';
+    panel.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div style="font-weight:600;font-size:14px;">Mooncow Settings</div>
+            <button id="mc-close-settings" style="background:none;border:none;color:#9ca3af;font-size:18px;cursor:pointer;">×</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;font-size:12px;">
+            <label style="display:flex;flex-direction:column;gap:6px;">
+                <span>Cerebras API Key</span>
+                <input id="mc-key-cerebras" type="password" placeholder="csk-..." style="background:#0b1220;border:1px solid #374151;color:#e5e7eb;padding:8px;border-radius:8px;"/>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px;">
+                <span>Google Gen AI (Gemini) API Key</span>
+                <input id="mc-key-google" type="password" placeholder="AI..." style="background:#0b1220;border:1px solid #374151;color:#e5e7eb;padding:8px;border-radius:8px;"/>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px;">
+                <span>Google Search API Key</span>
+                <input id="mc-key-gsearch" type="password" placeholder="AIza..." style="background:#0b1220;border:1px solid #374151;color:#e5e7eb;padding:8px;border-radius:8px;"/>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px;">
+                <span>Google Search CX</span>
+                <input id="mc-key-gcx" type="text" placeholder="your-cx-id" style="background:#0b1220;border:1px solid #374151;color:#e5e7eb;padding:8px;border-radius:8px;"/>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px;">
+                <span>Jina API Key</span>
+                <input id="mc-key-jina" type="password" placeholder="jina_..." style="background:#0b1220;border:1px solid #374151;color:#e5e7eb;padding:8px;border-radius:8px;"/>
+            </label>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:2px;">
+                <button id="mc-save-settings" style="background:#2563eb;border:none;color:#fff;padding:8px 10px;border-radius:8px;cursor:pointer;">Save</button>
+            </div>
+            <div style="font-size:11px;color:#9ca3af;border-top:1px solid #1f2937;padding-top:8px;line-height:1.45;">
+                <div style="font-weight:600;color:#d1d5db;margin-bottom:6px;">How to get keys (free tiers)</div>
+                <div style="margin-bottom:8px;">
+                    <div style="font-weight:600;">Cerebras API key — <a href="https://inference-docs.cerebras.ai/quickstart" target="_blank" rel="noreferrer">inference-docs.cerebras.ai/quickstart → “Get an API Key”</a></div>
+                    <div>Make a Cerebras Cloud account, go to <strong>API Keys</strong> in the left nav, click <strong>Create key</strong>, copy it (format looks like <code>csk-...</code>). (<a href="https://inference-docs.cerebras.ai/quickstart" target="_blank" rel="noreferrer">inference-docs.cerebras.ai</a>, <a href="https://cloud.cerebras.ai/" target="_blank" rel="noreferrer">Cerebras Cloud</a>)</div>
+                    <div style="color:#9ca3af;">Free tier: ~14k chats/day or ~1M tokens.</div>
+                </div>
+                <div style="margin-bottom:8px;">
+                    <div style="font-weight:600;">Google Gen AI (Gemini) API key — <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studio</a></div>
+                    <div>Sign in, hit <strong>Create API key</strong>, and you’re done; works with the Gemini API right away. (Docs: “Using Gemini API keys”.) (<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">aistudio.google.com</a>, <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank" rel="noreferrer">Google AI for Developers</a>)</div>
+                    <div style="color:#9ca3af;">Free tier: 100/day (2.5 Pro), 250/day (2.5 Flash), 1000/day (2.5 Flash-lite), 14,400/day (Gemma 3). We auto-pick the best model and gracefully fall back when you hit limits.</div>
+                </div>
+                <div style="margin-bottom:8px;">
+                    <div style="font-weight:600;">Google Search API key (Custom Search JSON API) — <a href="https://support.google.com/googleapi/answer/6158862?hl=en" target="_blank" rel="noreferrer">Google Cloud Console guide</a></div>
+                    <div>In Google Cloud Console: create/select a project → <strong>APIs & services</strong> → <strong>Credentials</strong> → <strong>Create credentials → API key</strong>, and be sure to <strong>enable</strong> the “Custom Search API” for that project. (Overview: <a href="https://developers.google.com/custom-search/v1/overview" target="_blank" rel="noreferrer">Developers</a>)</div>
+                    <div style="color:#9ca3af;">Free tier: ~100/day.</div>
+                </div>
+                <div style="margin-bottom:8px;">
+                    <div style="font-weight:600;">Google Search CX (Programmable Search Engine ID) — <a href="https://programmablesearchengine.google.com/controlpanel/all" target="_blank" rel="noreferrer">Programmable Search control panel</a></div>
+                    <div>Create/select your search engine, then grab <strong>Search engine ID</strong> from the <strong>Basic</strong> section; that value is your <code>cx</code>. (Help: <a href="https://developers.google.com/custom-search/v1/overview" target="_blank" rel="noreferrer">Developers</a>, <a href="https://support.google.com/programmable-search/answer/12499034?hl=en" target="_blank" rel="noreferrer">Google Help</a>)</div>
+                </div>
+                <div>
+                    <div style="font-weight:600;">Jina API key — <a href="https://jina.ai/api-dashboard/" target="_blank" rel="noreferrer">Jina API dashboard</a></div>
+                    <div>Log in, click <strong>Create API Key</strong>; new keys come with a big free token allowance and work with Jina Reader/Embeddings endpoints. (Reader page shows the “get your API key” entry.) (<a href="https://jina.ai/" target="_blank" rel="noreferrer">Jina AI</a>)</div>
+                    <div style="color:#9ca3af;">Free tier: ~200 read requests/min; without a key you usually still get ~20/min.</div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(panel);
+    const closeBtn = panel.querySelector('#mc-close-settings');
+    closeBtn.addEventListener('click', () => { panel.style.display = 'none'; });
+    (async () => {
+        const s = await getStored(['CEREBRAS_API_KEY','GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY','GOOGLE_CSE_CX','JINA_API_KEY']);
+        const setVal = (id, v) => { const el = panel.querySelector(id); if (el && typeof v === 'string') el.value = v; };
+        setVal('#mc-key-cerebras', s.CEREBRAS_API_KEY || '');
+        setVal('#mc-key-google', s.GOOGLE_API_KEY || '');
+        setVal('#mc-key-gsearch', s.GOOGLE_SEARCH_API_KEY || '');
+        setVal('#mc-key-gcx', s.GOOGLE_CSE_CX || '');
+        setVal('#mc-key-jina', s.JINA_API_KEY || '');
+    })();
+    const saveBtn = panel.querySelector('#mc-save-settings');
+    saveBtn.addEventListener('click', async () => {
+        const data = {
+            CEREBRAS_API_KEY: panel.querySelector('#mc-key-cerebras')?.value || '',
+            GOOGLE_API_KEY: panel.querySelector('#mc-key-google')?.value || '',
+            GOOGLE_SEARCH_API_KEY: panel.querySelector('#mc-key-gsearch')?.value || '',
+            GOOGLE_CSE_CX: panel.querySelector('#mc-key-gcx')?.value || '',
+            JINA_API_KEY: panel.querySelector('#mc-key-jina')?.value || ''
+        };
+        try {
+            if (typeof browser !== 'undefined' && browser.storage?.local?.set) {
+                await browser.storage.local.set(data);
+            } else if (typeof chrome !== 'undefined' && chrome.storage?.local?.set) {
+                await new Promise(res => chrome.storage.local.set(data, res));
+            }
+        } catch (_) {}
+        saveBtn.textContent = 'Saved ✓';
+        setTimeout(() => { saveBtn.textContent = 'Save'; }, 1200);
+    });
+}
 
 
 function switchAIProvider(provider) {
@@ -2199,6 +2364,13 @@ function activateColorPicker(colorResult) {
     closeButton.onclick = closeChatTile;
     chatTileContainer.appendChild(closeButton);
 
+    const settingsButton = document.createElement('button');
+    settingsButton.className = 'chat-settings-button';
+    settingsButton.title = 'Settings';
+    settingsButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0A1.65 1.65 0 0 0 9 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0A1.65 1.65 0 0 0 21 12h.09a2 2 0 1 1 0 4H21a1.65 1.65 0 0 0-1.51 1Z"/></svg>`;
+    settingsButton.onclick = openSettingsPanel;
+    chatTileContainer.appendChild(settingsButton);
+
     const expandButton = document.createElement('button');
     expandButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
@@ -2714,7 +2886,7 @@ async function activateAIChat(query) {
         chatHistory.scrollTop = chatHistory.scrollHeight;
 
         // Start streaming tokens instead of waiting for full response
-        startStreaming(aiProvider, conversation, thinkingMessageEl);
+        beginStreamingWithKeyCheck(aiProvider, conversation, thinkingMessageEl);
 
         const followupContainer = document.createElement('div');
         followupContainer.className = 'followup-container';
@@ -2750,7 +2922,7 @@ async function activateAIChat(query) {
                 chatHistory.scrollTop = chatHistory.scrollHeight;
 
                 // Start streaming tokens instead of waiting for full response
-                startStreaming(aiProvider, conversation, thinkingFollowupEl);
+                beginStreamingWithKeyCheck(aiProvider, conversation, thinkingFollowupEl);
             }
         };
 
@@ -2804,6 +2976,13 @@ async function activateAIChat(query) {
     closeButton.onclick = closeChatTile;
     chatTileContainer.appendChild(closeButton);
 
+    const settingsButton = document.createElement('button');
+    settingsButton.className = 'chat-settings-button';
+    settingsButton.title = 'Settings';
+    settingsButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0A1.65 1.65 0 0 0 9 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0A1.65 1.65 0 0 0 21 12h.09a2 2 0 1 1 0 4H21a1.65 1.65 0 0 0-1.51 1Z"/></svg>`;
+    settingsButton.onclick = openSettingsPanel;
+    chatTileContainer.appendChild(settingsButton);
+
     const expandButton = document.createElement('button');
     expandButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
@@ -2846,7 +3025,7 @@ async function activateAIChat(query) {
     saveChatSessions();
 
     // Start streaming tokens instead of waiting for full response
-    startStreaming(aiProvider, conversation, thinkingMessageEl);
+    beginStreamingWithKeyCheck(aiProvider, conversation, thinkingMessageEl);
 
     const followupContainer = document.createElement('div');
     followupContainer.className = 'followup-container';
@@ -2882,7 +3061,7 @@ async function activateAIChat(query) {
             chatHistory.scrollTop = chatHistory.scrollHeight;
 
             // Start streaming tokens instead of waiting for full response
-            startStreaming(aiProvider, conversation, thinkingFollowupEl);
+            beginStreamingWithKeyCheck(aiProvider, conversation, thinkingFollowupEl);
         }
     };
 
