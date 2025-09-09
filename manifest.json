@@ -105,7 +105,8 @@
         "search.html",
         "style.css",
         "search.js",
-        "ranking.js"
+        "ranking.js",
+        "nerdamer.js"
       ],
       "matches": [
         "<all_urls>"

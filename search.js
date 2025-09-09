@@ -15,6 +15,8 @@ let isPinned = false;
 
 // Suggestion cache (moved to top to avoid TDZ issues)
 const suggestionCache = new Map();
+const defineCache = new Map();
+const weatherCache = new Map();
 
 // Safe wrapper for extension messaging that tolerates missing `browser` (content frames)
 function runtimeSendMessage(message) {
@@ -761,8 +763,534 @@ window.searchDetectors = {
         }
         
         return null;
+    },
+
+
+    // Dictionary: define <word>
+    detectDefine: function(query) {
+        const m = query.match(/^\s*(define|what does)\s+([\w-]{2,})/i);
+        if (!m) return null;
+        const word = m[2];
+        return { type: 'define', title: `Define "${word}"`, word };
+    },
+
+    // Spelling: "how to spell x", "correct spelling of x", "x spelling", "spell x"
+    detectSpelling: function(query) {
+        if (!query) return null;
+        const q = String(query).trim();
+        let word = '';
+        const patterns = [
+            // "correct spelling of x" / "right spelling of x" / "proper spelling of x"
+            /^\s*(?:correct|right|proper)\s+spelling\s+of\s+"?([A-Za-z][A-Za-z'\-]+)"?\s*$/i,
+            // "how to spell x" / "how do you spell x" / "how do I spell x"
+            /^\s*how\s+(?:to|do\s+you|do\s+I)\s+spell\s+"?([A-Za-z][A-Za-z'\-]+)"?\s*$/i,
+            // "spelling of x" / "spelling for x" / "spell of x"
+            /^\s*(?:spell(?:ing)?\s+of|spelling\s+for)\s+"?([A-Za-z][A-Za-z'\-]+)"?\s*$/i,
+            // "x spelling" / "x spell"
+            /^\s*([A-Za-z][A-Za-z'\-]+)\s+spell(?:ing)?\s*$/i,
+            // "spell x" / "spellcheck x"
+            /^\s*spell(?:check)?\s+"?([A-Za-z][A-Za-z'\-]+)"?\s*$/i,
+            // "what's the spelling of x" / "what is the spelling of x"
+            /^\s*what'?s?\s+(?:the\s+)?spelling\s+of\s+"?([A-Za-z][A-Za-z'\-]+)"?\s*$/i,
+            // "how is x spelled" / "how's x spelled"
+            /^\s*how'?s?\s+"?([A-Za-z][A-Za-z'\-]+)"?\s+spelled\s*$/i,
+            // "is x spelled correctly" / "is x spelled right"
+            /^\s*is\s+"?([A-Za-z][A-Za-z'\-]+)"?\s+spelled\s+(?:correctly|right)\s*$/i,
+            // "check spelling x" / "check spelling of x"
+            /^\s*check\s+spelling\s+(?:of\s+)?"?([A-Za-z][A-Za-z'\-]+)"?\s*$/i
+        ];
+        for (const re of patterns) {
+            const m = q.match(re);
+            if (m) { word = (m[1] || '').trim(); break; }
+        }
+        if (!word) return null;
+        return { type: 'spelling', title: `Check spelling for "${word}"`, word };
+    },
+
+    // Weather: weather boston | forecast in tokyo | temp in nyc
+    detectWeather: function(query) {
+        const m = query.match(/\b(weather|forecast|temp(?:erature)?)\b\s+(in\s+)?([a-zA-Z\s,.-]{2,})$/i);
+        if (!m) return null;
+        const city = (m[3] || '').trim();
+        if (!city) return null;
+        return { type: 'weather', title: `Weather in ${city}`, city };
+    },
+
+    // UUID/GUID generator
+    detectUUID: function(query) {
+        if (/\b(uuid|guid|generate uuid|new uuid)\b/i.test(query)) {
+            const v4 = (a) => (a ^ Math.random() * 16 >> a / 4).toString(16);
+            const uuid = '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, v4);
+            return { type: 'uuid', title: 'Generate UUID', answer: uuid };
+        }
+        return null;
+    },
+
+    // Package tracking number detection (UPS/USPS/FedEx best-effort)
+    detectPackageTracking: function(query) {
+        const q = query.replace(/\s+/g, '').toUpperCase();
+        if (/^1Z[0-9A-Z]{16}$/.test(q)) {
+            return { type: 'tracking', title: 'Track package (UPS)', carrier: 'ups', code: q };
+        }
+        if (/^\d{20,22}$/.test(q)) {
+            return { type: 'tracking', title: 'Track package (USPS)', carrier: 'usps', code: q };
+        }
+        if (/^\d{12,15}$/.test(q) || /^\d{20}$/.test(q)) {
+            return { type: 'tracking', title: 'Track package (FedEx)', carrier: 'fedex', code: q };
+        }
+        return null;
+    },
+
+    // Text transforms: slugify, camel case, snake case, kebab case, upper/lower/title
+    detectTextTransform: function(query) {
+        const m = query.match(/^\s*(slugify|kebab|snake|camel|title|uppercase|lowercase)\s+(.+)/i);
+        if (!m) return null;
+        const kind = m[1].toLowerCase();
+        const text = m[2];
+        const toSlug = (s) => s.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-');
+        const toSnake = (s) => s.replace(/\W+/g, ' ').trim().replace(/\s+/g, '_').toLowerCase();
+        const toCamel = (s) => {
+            const parts = s.replace(/[^A-Za-z0-9]+/g, ' ').trim().split(/\s+/);
+            return parts.map((p, i) => i === 0 ? p.toLowerCase() : (p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())).join('');
+        };
+        const toKebab = (s) => toSlug(s);
+        const toTitle = (s) => s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        let transformed = text;
+        switch (kind) {
+            case 'slugify':
+            case 'kebab': transformed = toKebab(text); break;
+            case 'snake': transformed = toSnake(text); break;
+            case 'camel': transformed = toCamel(text); break;
+            case 'uppercase': transformed = text.toUpperCase(); break;
+            case 'lowercase': transformed = text.toLowerCase(); break;
+            case 'title': transformed = toTitle(text); break;
+        }
+        return { type: 'text_transform', title: `Copy ${kind} case`, answer: transformed };
+    },
+
+    // Email compose: email user@host [subject: ...] [body: ...]
+    detectEmailCompose: function(query) {
+        const m = query.match(/\b(email)\s+([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b(?:\s+(.*))?/i);
+        if (!m) return null;
+        const address = m[2];
+        const rest = m[3] || '';
+        let subject = '', body = '';
+        const subM = rest.match(/(?:subject|sub|s):\s*([^]+?)(?=\s+(?:body|b):|$)/i);
+        const bodyM = rest.match(/(?:body|b):\s*([^]+)$/i);
+        if (subM) subject = subM[1].trim();
+        if (bodyM) body = bodyM[1].trim();
+        return { type: 'email_compose', title: `Email ${address}`, address, subject, body };
+    },
+
+    // Site search on current domain: "search this site foo"
+    detectSiteSearch: function(query) {
+        const m = query.match(/\b(search\s+this\s+site|site\s+search|on\s+this\s+site)\b\s+(.+)/i);
+        if (!m) return null;
+        const q = m[2].trim();
+        return { type: 'site_search', title: `Search this site for "${q}"`, siteQuery: q };
+    },
+
+    // Bookmark current page
+    detectBookmarkPage: function(query) {
+        if (/\b(bookmark(\s+this|\s+page)?|save\s+page)\b/i.test(query)) {
+            return { type: 'bookmark_page', title: 'Bookmark current page' };
+        }
+        return null;
+    },
+
+    // Tab actions
+    detectTabActions: function(query) {
+        const q = query.toLowerCase();
+        if (/\b(duplicate tab|duplicate)\b/.test(q)) return { type: 'tab_action', action: 'duplicate', title: 'Duplicate current tab' };
+        if (/\b(reload|refresh)\b/.test(q)) return { type: 'tab_action', action: 'reload', hard: /hard|cache/i.test(query), title: 'Reload current tab' };
+        if (/\b(back|go back|previous page)\b/.test(q)) return { type: 'tab_action', action: 'back', title: 'Go back' };
+        if (/\b(forward|go forward|next page)\b/.test(q)) return { type: 'tab_action', action: 'forward', title: 'Go forward' };
+        if (/\b(pin tab|pin)\b/.test(q)) return { type: 'tab_action', action: 'pin', title: 'Pin tab' };
+        if (/\b(unpin tab|unpin)\b/.test(q)) return { type: 'tab_action', action: 'unpin', title: 'Unpin tab' };
+        if (/\b(mute tab|mute)\b/.test(q)) return { type: 'tab_action', action: 'mute', title: 'Mute tab' };
+        if (/\b(unmute tab|unmute)\b/.test(q)) return { type: 'tab_action', action: 'unmute', title: 'Unmute tab' };
+        return null;
+    },
+
+    // Screenshot
+    detectScreenshot: function(query) {
+        if (/\b(screenshot|screen\s*cap|capture\s*screen)\b/i.test(query)) {
+            return { type: 'screenshot', title: 'Capture and download screenshot' };
+        }
+        return null;
+    },
+
+    // View source of current page
+    detectViewSource: function(query) {
+        if (/\b(view\s*source|page\s*source|show\s*source)\b/i.test(query)) {
+            return { type: 'view_source', title: 'View page source' };
+        }
+        return null;
+    },
+
+    // Copy current URL
+    detectCopyUrl: function(query) {
+        if (/\b(copy\s*(current\s*)?url|copy\s*link)\b/i.test(query)) {
+            return { type: 'copy_url', title: 'Copy current page URL' };
+        }
+        return null;
+    },
+
+    // Percentage: "20% of 250"
+    detectPercentage: function(query) {
+        const m = query.match(/(\d+(?:\.\d+)?)%\s+of\s+(\d+(?:\.\d+)?)/i);
+        if (!m) return null;
+        const pct = parseFloat(m[1]);
+        const base = parseFloat(m[2]);
+        const val = (pct / 100) * base;
+        return { type: 'percentage', title: `${pct}% of ${base}`, answer: val.toFixed(2) };
+    },
+
+    // Tip calculator: "tip 20% 48.50 [for 3]"
+    detectTip: function(query) {
+        const m = query.match(/^\s*tip\s+(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)(?:\s*(?:for|x|split)\s*(\d+))?/i);
+        if (!m) return null;
+        const pct = parseFloat(m[1]);
+        const base = parseFloat(m[2]);
+        const people = m[3] ? Math.max(1, parseInt(m[3], 10)) : 1;
+        const tip = base * (pct / 100);
+        const total = base + tip;
+        const each = total / people;
+        const title = people > 1 ? `Tip ${pct}% on $${base.toFixed(2)} (x${people})` : `Tip ${pct}% on $${base.toFixed(2)}`;
+        const answer = people > 1 ? `Total $${total.toFixed(2)} — Each $${each.toFixed(2)}` : `Total $${total.toFixed(2)} (Tip $${tip.toFixed(2)})`;
+        return { type: 'tip', title, answer };
+    },
+
+    // Split bill: "split 5 120" or "split 5 $120"
+    detectSplitBill: function(query) {
+        const m = query.match(/^\s*split\s+(\d+)\s+\$?(\d+(?:\.\d+)?)/i);
+        if (!m) return null;
+        const people = Math.max(1, parseInt(m[1], 10));
+        const amount = parseFloat(m[2]);
+        const each = amount / people;
+        return { type: 'split_bill', title: `Split $${amount.toFixed(2)} among ${people}`, answer: `$${each.toFixed(2)} each` };
+    },
+
+    // Base conversion: "255 to hex", "0xff to dec", "1010 to dec"
+    detectBaseConvert: function(query) {
+        const m = query.match(/^\s*([0-9a-fxob]+)\s+to\s+(hex|dec|bin)\b/i);
+        if (!m) return null;
+        const src = m[1].toLowerCase();
+        const target = m[2].toLowerCase();
+        let val = NaN;
+        if (src.startsWith('0x')) val = parseInt(src.slice(2), 16);
+        else if (src.endsWith('b')) val = parseInt(src.slice(0, -1), 2);
+        else if (/^[01]+$/.test(src)) val = parseInt(src, 2);
+        else val = parseInt(src, 10);
+        if (Number.isNaN(val)) return null;
+        let out = '';
+        if (target === 'hex') out = '0x' + val.toString(16);
+        else if (target === 'bin') out = val.toString(2) + 'b';
+        else out = String(val);
+        return { type: 'base_convert', title: `Convert ${m[1]} to ${target}`, answer: out };
+    },
+
+    // GitHub repo shortcut: "gh owner/repo" or "github owner/repo"
+    detectGithubRepo: function(query) {
+        let m = query.match(/^\s*gh\s+([\w.-]+)\/([\w.-]+)\s*$/i);
+        if (!m) m = query.match(/^\s*github\s+([\w.-]+)\s+([\w.-]+)\s*$/i);
+        if (!m) return null;
+        const owner = m[1];
+        const repo = m[2];
+        return { type: 'navigation', title: `Open ${owner}/${repo}`, url: `https://github.com/${owner}/${repo}`, domain: 'github.com', favicon: `https://www.google.com/s2/favicons?domain=github.com&sz=32` };
+    },
+
+    // Algebra solver - handles complex equations using Nerdamer CAS
+    detectAlgebra: function(query) {
+        if (!query) return null;
+        
+        // MUST contain an equals sign - no auto-adding =0
+        if (!query.includes('=')) return null;
+        
+        // Must look like an actual equation with mathematical structure
+        // Require: variables + operators + equals, reject plain text
+        const mathPattern = /^[0-9a-zA-Z+\-*/()^.=\s√]+$/;
+        if (!mathPattern.test(query)) return null;
+        
+        // Must have at least one variable (letter) AND one mathematical operator or number
+        const hasVariable = /[a-zA-Z]/.test(query);
+        const hasMathContent = /[\d+\-*/^√]/.test(query);
+        if (!hasVariable || !hasMathContent) return null;
+        
+        // Reject if it looks like plain text (too many consecutive letters)
+        const longWordPattern = /[a-zA-Z]{4,}/;
+        if (longWordPattern.test(query.replace(/sqrt|sin|cos|tan|log|ln/g, ''))) return null;
+        
+        // Normalize messy human input
+        function normalizeInput(s) {
+            // Trim + unify minus signs
+            s = s.replace(/[–—−]/g, '-');
+            s = s.replace(/\u221A/g, 'sqrt');
+            // Insert * between: number/variable, variable/variable, )(
+            s = s.replace(/(\d)([a-zA-Z])/g, '$1*$2');
+            s = s.replace(/([a-zA-Z])(\d)/g, '$1*$2');
+            s = s.replace(/\)([a-zA-Z0-9])/g, ')*$1');
+            s = s.replace(/([a-zA-Z0-9])\(/g, '$1*(');
+            // Strip spaces
+            s = s.replace(/\s+/g, '');
+            return s;
+        }
+
+        const normalizedQuery = normalizeInput(query);
+        
+        // Basic validation: must contain exactly one '='
+        const equalsMatches = normalizedQuery.match(/=/g) || [];
+        if (equalsMatches.length !== 1) return null;
+        
+        const letters = normalizedQuery.match(/[a-zA-Z]/g) || [];
+        if (letters.length === 0) return null;
+        
+        // Pick the primary variable (first letter found)
+        const variable = letters[0].toLowerCase();
+
+        const [lhs, rhs] = normalizedQuery.split('=');
+        if (!lhs.trim() || !rhs.trim()) return null;
+
+        // Try to solve with Nerdamer
+        try {
+            if (typeof nerdamer === 'undefined') {
+                // Fallback to simple linear solver if Nerdamer not loaded
+                return detectAlgebraFallback(normalizedQuery, variable);
+            }
+
+            // --- Helpers to make Nerdamer output pretty ---
+            function prettifySymbolic(text) {
+                try { text = String(text || '').trim(); } catch(_) { text = ''; }
+                if (!text) return '';
+                // Replace sqrt() with √, normalize spaces and commas
+                text = text.replace(/sqrt\(/g, '√(')
+                           .replace(/\s+/g, '')
+                           .replace(/,/g, ', ');
+                // Remove surrounding brackets for single vector strings
+                if (text.startsWith('[') && text.endsWith(']')) {
+                    text = text.slice(1, -1);
+                }
+                return text;
+            }
+
+            function roundTo(n, decimals) {
+                const p = Math.pow(10, decimals);
+                return (Math.round(n * p) / p).toString();
+            }
+
+            function formatSolutions(rawList) {
+                const flattened = [];
+                for (let s of rawList) {
+                    let t = String(s);
+                    // If the solution came back as a vector-like string, split it
+                    if (t.startsWith('[') && t.endsWith(']')) {
+                        const inner = t.slice(1, -1);
+                        inner.split(',').forEach(part => {
+                            const p = part.trim();
+                            if (p) flattened.push(p);
+                        });
+                    } else {
+                        flattened.push(t);
+                    }
+                }
+
+                const formatted = flattened.map(part => {
+                    // Prefer numeric when possible, otherwise prettified symbolic
+                    try {
+                        const n = nerdamer(part).evaluate().text();
+                        const num = parseFloat(n);
+                        if (Number.isFinite(num)) return roundTo(num, 6);
+                    } catch (_) {}
+                    return prettifySymbolic(part);
+                });
+
+                // Dedupe while keeping order
+                return Array.from(new Set(formatted)).filter(Boolean);
+            }
+
+            const expression = `(${lhs})-(${rhs})`;
+            // Use nerdamer.solve to get robust solution sets
+            const solutions = nerdamer.solve(expression, variable);
+            
+            let solutionArray = [];
+            if (solutions && solutions.symbol === 'vector') {
+                // Multiple solutions
+                solutionArray = solutions.elements.map(e => e.text());
+            } else if (Array.isArray(solutions)) {
+                solutionArray = solutions.map(s => (typeof s.text === 'function' ? s.text() : String(s))); 
+            } else {
+                // Single solution
+                const single = (solutions && typeof solutions.text === 'function') ? solutions.text() : String(solutions);
+                solutionArray = [single];
+            }
+            
+            // Filter out invalid solutions
+            solutionArray = solutionArray.filter(s => s && s !== '[]' && s !== 'undefined');
+
+            // Sanitize/pretty-print the solutions
+            const prettySolutions = formatSolutions(solutionArray);
+            
+            if (prettySolutions.length === 0) {
+                return { 
+                    type: 'algebra', 
+                    title: 'No solution found', 
+                    equation: query, 
+                    answer: 'No solution',
+                    variable: variable,
+                    solutions: [],
+                    normalizedEquation: normalizedQuery
+                };
+            }
+
+            // Format the result. Always surface a concise answer.
+            const concise = prettySolutions.join(', ');
+            const title = `${variable} = ${concise}`;
+            
+            return { 
+                type: 'algebra', 
+                title: title,
+                equation: query, 
+                answer: concise,
+                variable: variable,
+                solutions: prettySolutions,
+                normalizedEquation: normalizedQuery,
+                isCopyResult: false 
+            };
+            
+        } catch (error) {
+            // Fallbacks: try quadratic formula before linear fallback
+            try {
+                // If polynomial in one variable up to degree 2, attempt quadratic parse
+                const quad = this.tryQuadraticSolve(lhs, rhs, variable);
+                if (quad) return quad;
+            } catch (_) {}
+            try {
+                return detectAlgebraFallback(normalizedQuery, variable); // linear fallback
+            } catch (_) {
+                return null;
+            }
+        }
+    },
+
+    // Attempt to solve ax^2 + bx + c = 0 after moving to one side
+    tryQuadraticSolve: function(lhs, rhs, variable) {
+        const expr = `(${lhs})-(${rhs})`;
+        const x = variable;
+        // Expand via nerdamer (if available) and extract coefficients
+        if (typeof nerdamer === 'undefined') return null;
+        const expanded = nerdamer.expand(expr).toString();
+        // Match ax^2 + bx + c form
+        const re = new RegExp(`^([+-]?[^${x}]*)${x}\^2([+-][^${x}]*)${x}([+-].+)?$`);
+        // Fallback simpler tokenization
+        let a=0,b=0,c=0;
+        try {
+            // Replace implicit coefficients
+            const t = expanded.replace(new RegExp(`(?<![\w.])${x}(?=[^\^])`, 'g'), `1*${x}`);
+            const terms = t.replace(/\s+/g,'').replace(/-/g,'+-').split('+').filter(Boolean);
+            for (const term of terms) {
+                if (term.includes(`${x}^2`)) {
+                    const coeff = term.replace(`${x}^2`, '').replace('*','') || '1';
+                    a += parseFloat(coeff);
+                } else if (term.includes(`${x}`)) {
+                    const coeff = term.replace(`${x}`, '').replace('*','') || '1';
+                    b += parseFloat(coeff);
+                } else {
+                    c += parseFloat(term);
+                }
+            }
+            if (![a,b,c].every(Number.isFinite)) return null;
+            if (Math.abs(a) < 1e-12) return null;
+            const disc = b*b - 4*a*c;
+            if (disc < 0) return {
+                type: 'algebra',
+                title: 'No real solution',
+                equation: `${lhs} = ${rhs}`,
+                answer: 'No real solution',
+                variable: x,
+                solutions: [],
+                normalizedEquation: `${lhs}=${rhs}`
+            };
+            const r1 = (-b + Math.sign(disc)*Math.sqrt(Math.abs(disc))) / (2*a);
+            const r2 = (-b - Math.sign(disc)*Math.sqrt(Math.abs(disc))) / (2*a);
+            const sols = [r1, r2].filter(v => Number.isFinite(v)).map(v => (Math.round(v*1e6)/1e6).toString());
+            if (!sols.length) return null;
+            return {
+                type: 'algebra',
+                title: `${x} = ${sols.join(', ')}`,
+                equation: `${lhs} = ${rhs}`,
+                answer: sols.join(', '),
+                variable: x,
+                solutions: sols,
+                normalizedEquation: `${lhs}=${rhs}`,
+                isCopyResult: false
+            };
+        } catch (_) { return null; }
     }
 };
+
+// Helper function for algebra fallback (moved outside searchDetectors to prevent duplicate calls)
+function detectAlgebraFallback(equation, variable) {
+    if (!equation || !equation.includes('=')) return null;
+    const parts = equation.split('=');
+    if (parts.length !== 2) return null;
+    const [lhs, rhs] = parts;
+    if (!lhs || !rhs) return null;
+    
+    // Simple parsing for ax + b = cx + d forms only
+    const toTerms = (side) => {
+        if (!side) return null;
+        try {
+            const s = side.replace(/\s+/g, '');
+            let a = 0, b = 0;
+            const tokens = s.replace(/\-/g, '+-').split('+').filter(Boolean);
+            for (const t of tokens) {
+                if (t.includes(variable)) {
+                    const coeffStr = t.replace(new RegExp(variable, 'g'), '');
+                    const coeff = coeffStr === '' ? 1 : (coeffStr === '-' ? -1 : parseFloat(coeffStr));
+                    if (Number.isFinite(coeff)) a += coeff; else return null;
+                } else {
+                    const val = parseFloat(t);
+                    if (Number.isFinite(val)) b += val; else return null;
+                }
+            }
+            return { a, b };
+        } catch (_) {
+            return null;
+        }
+    };
+
+    const leftTerms = toTerms(lhs.trim());
+    const rightTerms = toTerms(rhs.trim());
+    if (!leftTerms || !rightTerms) return null;
+    
+    const A = leftTerms.a - rightTerms.a;
+    const B = rightTerms.b - leftTerms.b;
+    
+    if (Math.abs(A) < 1e-9) {
+        return { 
+            type: 'algebra', 
+            title: 'No unique solution', 
+            equation: equation, 
+            answer: 'No unique solution',
+            variable: variable,
+            solutions: [],
+            normalizedEquation: equation
+        };
+    }
+    
+    const solution = B / A;
+    const ans = Number.isFinite(solution) ? (Math.round(solution * 1e6) / 1e6).toString() : 'NaN';
+    return { 
+        type: 'algebra', 
+        title: `${variable} = ${ans}`, 
+        equation: equation, 
+        answer: ans,
+        variable: variable,
+        solutions: [ans],
+        normalizedEquation: equation,
+        isCopyResult: false 
+    };
+}
 
 const unpinnedIconSVG = `<svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-pinned"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 4v6l-2 4v2h10v-2l-2 -4v-6" /><path d="M12 16l0 5" /><path d="M8 4l8 0" /></svg>`;
 const pinnedIconSVG = `<svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="currentColor"  class="icon icon-tabler icons-tabler-filled icon-tabler-pinned"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M16 3a1 1 0 0 1 .117 1.993l-.117 .007v4.764l1.894 3.789a1 1 0 0 1 .1 .331l.006 .116v2a1 1 0 0 1 -.883 .993l-.117 .007h-4v4a1 1 0 0 1 -1.993 .117l-.007 -.117v-4h-4a1 1 0 0 1 -.993 -.883l-.007 -.117v-2a1 1 0 0 1 .06 -.34l.046 -.107l1.894 -3.791v-4.762a1 1 0 0 1 -.117 -1.993l.117 -.007h8z" /></svg>`;
@@ -797,13 +1325,13 @@ const SEARCH_ENGINES = {
     
   
     // --- Google verticals ---
-    google_images:{ name: 'Google Images', url: 'https://www.google.com/search?tbm=isch&q=',        aliases: ['@img', '@images'] },  // tbm=isch
+    google_images:{ name: 'Google Images', url: 'https://www.google.com/search?tbm=isch&q=',        aliases: ['@img', '@images', '@imgs'] },  // tbm=isch
     google_news:  { name: 'Google News',   url: 'https://news.google.com/search?q=',                aliases: ['@news'] },
     google_maps:  { name: 'Google Maps',   url: 'https://www.google.com/maps/search/?api=1&query=',aliases: ['@maps'] },
     google_scholar:{name:'Google Scholar', url: 'https://scholar.google.com/scholar?q=',            aliases: ['@scholar'] },
   
     // --- Knowledge / docs ---
-    wikipedia:    { name: 'Wikipedia',     url: 'https://en.wikipedia.org/w/index.php?title=Special:Search&search=', aliases: ['@wiki'] },
+    wikipedia:    { name: 'Wikipedia',     url: 'https://en.wikipedia.org/w/index.php?title=Special:Search&search=', aliases: ['@wiki', '@wikipedia'] },
     mdn:          { name: 'MDN Web Docs',  url: 'https://developer.mozilla.org/en-US/search?q=',    aliases: ['@mdn'] },
     devdocs:      { name: 'DevDocs',       url: 'https://devdocs.io/#q=',                           aliases: ['@devdocs'] },
   
@@ -812,7 +1340,7 @@ const SEARCH_ENGINES = {
     pypi:         { name: 'PyPI',          url: 'https://pypi.org/search/?q=',                      aliases: ['@pypi'] },
     maven:        { name: 'Maven Central', url: 'https://search.maven.org/search?q=',               aliases: ['@maven'] },
     crates:       { name: 'crates.io',     url: 'https://crates.io/search?q=',                      aliases: ['@crates', '@rust'] },
-    pkggo:        { name: 'pkg.go.dev',    url: 'https://pkg.go.dev/search?q=',                     aliases: ['@go', '@pkggo'] },
+    pkggo:        { name: 'pkg.go.dev',    url: 'https://pkg.go.dev/search?q=',                     aliases: [ '@pkggo'] },
     dockerhub:    { name: 'Docker Hub',    url: 'https://hub.docker.com/search?q=',                 aliases: ['@docker'] },
   
     // --- Code search / forges ---
@@ -821,7 +1349,7 @@ const SEARCH_ENGINES = {
   
     // --- Research ---
     arxiv:        { name: 'arXiv',         url: 'https://arxiv.org/search/?searchtype=all&query=',  aliases: ['@arxiv'] },
-    semantic:     { name: 'Semantic Scholar', url: 'https://www.semanticscholar.org/search?q=',     aliases: ['@s2', '@semanticscholar'] },
+    semantic:     { name: 'Semantic Scholar', url: 'https://www.semanticscholar.org/search?q=',     aliases: ['@semanticscholar'] },
     pubmed:       { name: 'PubMed',        url: 'https://pubmed.ncbi.nlm.nih.gov/?term=',           aliases: ['@pubmed'] },
   
     // --- Tech news / product discovery ---
@@ -831,8 +1359,8 @@ const SEARCH_ENGINES = {
     // --- Stack Exchange network sites ---
     stackexchange:{ name: 'Stack Exchange',url: 'https://stackexchange.com/search?q=',              aliases: ['@se'] },
     superuser:    { name: 'Super User',    url: 'https://superuser.com/search?q=',                  aliases: ['@su', '@superuser'] },
-    serverfault:  { name: 'Server Fault',  url: 'https://serverfault.com/search?q=',                aliases: ['@sf', '@serverfault'] },
-    askubuntu:    { name: 'Ask Ubuntu',    url: 'https://askubuntu.com/search?q=',                  aliases: ['@au', '@askubuntu'] },
+    serverfault:  { name: 'Server Fault',  url: 'https://serverfault.com/search?q=',                aliases: ['@serverfault'] },
+    askubuntu:    { name: 'Ask Ubuntu',    url: 'https://askubuntu.com/search?q=',                  aliases: [ '@askubuntu'] },
   
     // --- General web (alt) ---
     yandex:       { name: 'Yandex',        url: 'https://yandex.com/search/?text=',                 aliases: ['@yandex'] },
@@ -848,15 +1376,28 @@ const SEARCH_ENGINES = {
     imdb:         { name: 'IMDb',          url: 'https://www.imdb.com/find?q=',                     aliases: ['@imdb'] },
     rottentomatoes:{name:'Rotten Tomatoes',url: 'https://www.rottentomatoes.com/search?search=',    aliases: ['@rt', '@rottentomatoes'] },
     goodreads:    { name: 'Goodreads',     url: 'https://www.goodreads.com/search?q=',              aliases: ['@gr', '@goodreads'] },
-    twitch:       { name: 'Twitch',        url: 'https://www.twitch.tv/search?term=',               aliases: ['@twitch'] },
+    twitch:       { name: 'Twitch',        url: 'https://www.twitch.tv/search?term=',               aliases: ['@twitch', '@ttv'] },
     steam:        { name: 'Steam',         url: 'https://store.steampowered.com/search/?term=',     aliases: ['@steam'] }
   };
   
-const calcIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M0 1.5A.5.5 0 01.5 1h15a.5.5 0 01.5.5V15a1 1 0 01-1 1H1a1 1 0 01-1-1V1.5zM1 2v13h14V2H1z"/><path d="M2 4h12v2H2V4zm2 3h2v2H4V7zm3 0h2v2H7V7zm3 0h2v2h-2V7zM4 10h2v2H4v-2zm3 0h2v2H7v-2zm3 0h2v2h-2v-2z"/></svg>`;
+// Clean calculator icon
+const calcIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Calculator icon"><rect x="4" y="3" width="16" height="18" rx="2.5"/><rect x="7" y="6" width="10" height="3" rx="0.75"/><circle cx="8" cy="12.5" r="1"/><circle cx="12" cy="12.5" r="1"/><circle cx="8" cy="15.5" r="1"/><circle cx="12" cy="15.5" r="1"/><circle cx="8" cy="18.5" r="1"/><circle cx="12" cy="18.5" r="1"/><path d="M16 11.5v2M15 12.5h2"/><path d="M15 15.5h2"/><path d="M15 18.25h2M15 19.25h2"/></svg>`;
 
 // AI Provider icons
 const brainIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5a2.5 2.5 0 0 0-4.96-.46 2.5 2.5 0 0 0-1.98 3 2.5 2.5 0 0 0-1.32 4.24 3 3 0 0 0 .34 5.58 2.5 2.5 0 0 0 2.96 3.08A2.5 2.5 0 0 0 9.5 22v-1.5a2.5 2.5 0 0 0-1.5-2.29 2.5 2.5 0 0 1-1.05-4.19 2.5 2.5 0 0 1 2.05-2.17A2.5 2.5 0 0 1 12 9.5Z"/><path d="M12 4.5a2.5 2.5 0 0 1 4.96-.46 2.5 2.5 0 0 1 1.98 3 2.5 2.5 0 0 1 1.32 4.24 3 3 0 0 1-.34 5.58 2.5 2.5 0 0 1-2.96 3.08A2.5 2.5 0 0 1 14.5 22v-1.5a2.5 2.5 0 0 1 1.5-2.29 2.5 2.5 0 0 0 1.05-4.19 2.5 2.5 0 0 0-2.05-2.17A2.5 2.5 0 0 0 12 9.5Z"/></svg>`;
 const lightningIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`;
+
+// Utility to scale inline SVG markup to a consistent size
+function scaleIcon(svgMarkup, sizePx) {
+    try {
+        const size = String(sizePx || 14);
+        return svgMarkup
+            .replace(/width="\d+"/i, `width="${size}"`)
+            .replace(/height="\d+"/i, `height="${size}"`);
+    } catch (_) {
+        return svgMarkup;
+    }
+}
 // Bootstrap Icons – "clipboard"
 const copyIcon = `<svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-copy"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" /><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></svg>`;
 const convertIcon = `<svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="currentColor"  class="icon icon-tabler icons-tabler-filled icon-tabler-transform"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 14a4 4 0 1 1 -3.995 4.2l-.005 -.2l.005 -.2a4 4 0 0 1 3.995 -3.8z" /><path d="M16.707 2.293a1 1 0 0 1 .083 1.32l-.083 .094l-1.293 1.293h3.586a3 3 0 0 1 2.995 2.824l.005 .176v3a1 1 0 0 1 -1.993 .117l-.007 -.117v-3a1 1 0 0 0 -.883 -.993l-.117 -.007h-3.585l1.292 1.293a1 1 0 0 1 -1.32 1.497l-.094 -.083l-3 -3a.98 .98 0 0 1 -.28 -.872l.036 -.146l.04 -.104c.058 -.126 .14 -.24 .245 -.334l2.959 -2.958a1 1 0 0 1 1.414 0z" /><path d="M3 12a1 1 0 0 1 .993 .883l.007 .117v3a1 1 0 0 0 .883 .993l.117 .007h3.585l-1.292 -1.293a1 1 0 0 1 -.083 -1.32l.083 -.094a1 1 0 0 1 1.32 -.083l.094 .083l3 3a.98 .98 0 0 1 .28 .872l-.036 .146l-.04 .104a1.02 1.02 0 0 1 -.245 .334l-2.959 2.958a1 1 0 0 1 -1.497 -1.32l.083 -.094l1.291 -1.293h-3.584a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-3a1 1 0 0 1 1 -1z" /><path d="M6 2a4 4 0 1 1 -3.995 4.2l-.005 -.2l.005 -.2a4 4 0 0 1 3.995 -3.8z" /></svg>`;
@@ -873,6 +1414,9 @@ const ipIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" f
 const textIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5 2V1a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h3zM4.5 5.029l.5 8.5a.5.5 0 1 0 .998-.06l-.5-8.5a.5.5 0 1 0-.998.06zm6.53-.528a.5.5 0 0 0-.528.47l-.5 8.5a.5.5 0 0 0 .998.058l.5-8.5a.5.5 0 0 0-.47-.528zM8 4.5a.5.5 0 0 0-.5.5v8.5a.5.5 0 0 0 1 0V5a.5.5 0 0 0-.5-.5z"/></svg>`;
 const base64Icon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M10.478 1.647a.5.5 0 1 0-.956-.294l-4 13a.5.5 0 0 0 .956.294l4-13zM4.854 4.146a.5.5 0 0 1 0 .708L1.707 8l3.147 3.146a.5.5 0 0 1-.708.708l-3.5-3.5a.5.5 0 0 1 0-.708l3.5-3.5a.5.5 0 0 1 .708 0zm6.292 0a.5.5 0 0 0 0 .708L14.293 8l-3.147 3.146a.5.5 0 0 0 .708.708l3.5-3.5a.5.5 0 0 0 0-.708l-3.5-3.5a.5.5 0 0 0-.708 0z"/></svg>`;
 const settingsIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.901 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319z"/></svg>`;
+const weatherIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 2a4 4 0 0 0-3.874 3.006A3.5 3.5 0 1 0 3.5 12H12a3 3 0 1 0 0-6h-.026A4.002 4.002 0 0 0 8 2z"/></svg>`;
+const defineIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1h8a1 1 0 0 1 1 1v12l-5-2-5 2V2a1 1 0 0 1 1-1z"/></svg>`;
+const screenshotIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M3 3h3V2H2v4h1V3zm9 0h-3V2h4v4h-1V3zM3 13h3v1H2v-4h1v3zm9 0h-3v1h4v-4h-1v3z"/></svg>`;
 const coinIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14zm0 1A8 8 0 1 1 8 0a8 8 0 0 1 0 16z"/><path d="M8 13.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zm0 .5A6 6 0 1 0 8 2a6 6 0 0 0 0 12z"/></svg>`;
 const dieIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.5 1a1.5 1.5 0 0 0-1.5 1.5v11a1.5 1.5 0 0 0 1.5 1.5h-11A1.5 1.5 0 0 0 1 13.5v-11A1.5 1.5 0 0 0 2.5 1h11zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M5.5 4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm8 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-8 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm8 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/></svg>`;
 const randomIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 1a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1H1.732l4.096 4.096a.5.5 0 0 1 0 .708L1.732 10.5H4a.5.5 0 0 1 0 1H1a.5.5 0 0 1-.5-.5v-3a.5.5 0 0 1 1 0v1.268l3.096-3.096L1.5 2.732V4a.5.5 0 0 1-1 0V1zm15 14a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1 0-1h2.268l-4.096-4.096a.5.5 0 0 1 0-.708L14.268 5.5H12a.5.5 0 0 1 0-1h3a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0V6.732l-3.096 3.096L14.5 13.268V12a.5.5 0 0 1 1 0v3z"/></svg>`;
@@ -896,6 +1440,20 @@ function updateSelection() {
     });
 }
 
+// Ensure an inline answer line is present/updated under a result item
+function showInlineAnswer(resultItem, text) {
+    try {
+        const container = resultItem.querySelector('.text-container') || resultItem.querySelector('.search-result-content') || resultItem;
+        let ans = resultItem.querySelector('.answer');
+        if (!ans) {
+            ans = document.createElement('span');
+            ans.className = 'answer';
+            container.appendChild(ans);
+        }
+        ans.textContent = String(text || '');
+    } catch (_) {}
+}
+
 function updateRestoreChatButtonVisibility() {
     if (chatWasHidden && chatHistory && chatHistory.children.length > 0) {
         restoreChatButton.style.display = 'flex';
@@ -917,6 +1475,7 @@ function togglePin() {
 }
 
 // Chat history management functions
+let stopButtonEl = null; // reference to the streaming stop button (if rendered)
 async function loadChatSessions() {
     try {
         const storageAPI = (typeof browser !== 'undefined' && browser.storage)
@@ -1111,15 +1670,23 @@ function switchToChatSession(chatId) {
         followupInput.type = 'text';
         followupInput.placeholder = 'Ask a follow up...';
 
-        const clearButton = document.createElement('button');
-        clearButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14zM10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>`;
-        clearButton.className = 'clear-chat-button';
-        clearButton.title = 'Clear chat';
-        clearButton.onclick = () => {
-            clearChatHistory();
+        const newChatBtn = document.createElement('button');
+        newChatBtn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>`;
+        newChatBtn.className = 'new-chat-button';
+        newChatBtn.title = 'Start new chat';
+        newChatBtn.onclick = () => {
+            const newId = createChatSession('New chat');
+            switchToChatSession(newId);
+            setTimeout(() => { try { followupInput && followupInput.focus(); } catch (_) {} }, 50);
         };
+
+        const stopBtn = document.createElement('button');
+        stopBtn.textContent = 'Stop';
+        stopBtn.className = 'stop-stream-button';
+        stopBtn.style.display = 'none';
+        stopBtn.title = 'Stop generating';
+        stopBtn.onclick = () => { try { if (window.__currentStreamCancel) window.__currentStreamCancel(); } catch (_) {} };
+        stopButtonEl = stopBtn;
 
         const sendButton = document.createElement('button');
         sendButton.textContent = 'Send';
@@ -1177,7 +1744,8 @@ function switchToChatSession(chatId) {
         aiToggle.appendChild(brainBtn);
         followupContainer.appendChild(aiToggle);
         
-        followupContainer.appendChild(clearButton);
+        followupContainer.appendChild(newChatBtn);
+        followupContainer.appendChild(stopBtn);
         followupContainer.appendChild(sendButton);
         chatTileContainer.appendChild(followupContainer);
     }
@@ -1593,16 +2161,9 @@ function updateChatHistoryList() {
     
     newChatButton.addEventListener('click', () => {
         hideChatHistory();
-        // Close any existing chat
-        if (isChatActive) {
-            closeChatTile();
-        }
-        // Clear current chat ID to start fresh
-        currentChatId = null;
-        // Focus the search input for new query
-        setTimeout(() => {
-            searchInput.focus();
-        }, 100);
+        const newId = createChatSession('New chat');
+        switchToChatSession(newId);
+        setTimeout(() => { try { followupInput && followupInput.focus(); } catch (_) {} }, 100);
     });
     
     chatHistoryDropdown.appendChild(newChatButton);
@@ -1724,8 +2285,10 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
         if (query && query.trim().length > 0) {
             const detectors = window.searchDetectors;
             if (detectors) {
-                specialResults = Object.values(detectors)
-                    .map(detector => {
+                // Only call primary detector functions that accept a single argument (query)
+                specialResults = Object.entries(detectors)
+                    .filter(([key, fn]) => typeof fn === 'function' && fn.length === 1)
+                    .map(([key, detector]) => {
                         try {
                             return detector(query);
                         } catch (e) {
@@ -1854,6 +2417,19 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
             switch(result.type) {
                 case 'ai': iconSvg = sparkleIcon; break;
                 case 'google': case 'suggestion': iconSvg = googleIcon; break;
+                case 'define': iconSvg = defineIcon; break;
+                case 'spelling': iconSvg = copyIcon; break;
+                case 'weather': iconSvg = weatherIcon; break;
+                case 'uuid': iconSvg = textIcon; break;
+                case 'tracking': iconSvg = linkIcon; break;
+                case 'text_transform': iconSvg = textIcon; break;
+                case 'email_compose': iconSvg = textIcon; break;
+                case 'site_search': iconSvg = googleIcon; break;
+                case 'bookmark_page': iconSvg = settingsIcon; break;
+                case 'tab_action': iconSvg = settingsIcon; break;
+                case 'screenshot': iconSvg = screenshotIcon; break;
+                case 'view_source': iconSvg = textIcon; break;
+                case 'copy_url': iconSvg = linkIcon; break;
                 case 'history': 
                     // Use favicon for history items when possible
                     if (result.url) {
@@ -1916,6 +2492,7 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
                 case 'roll_die': iconSvg = dieIcon; break;
                 case 'random_number': iconSvg = randomIcon; break;
                 case 'user_agent': iconSvg = textIcon; break;
+                case 'algebra': iconSvg = calcIcon; break;
                 case 'navigation': 
                     // Use favicon if available, otherwise globe icon
                     if (result.favicon) {
@@ -1969,6 +2546,11 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
                 recentLabel.className = 'recently-searched-label'; // reuse styling
                 recentLabel.textContent = 'Recently Visited';
                 resultItem.appendChild(recentLabel);
+            } else if (result.fromClipboard) {
+                const clipLabel = document.createElement('span');
+                clipLabel.className = 'recently-searched-label';
+                clipLabel.textContent = 'Visit from clipboard';
+                resultItem.appendChild(clipLabel);
             }
             
             if (result.answer && !result.isCopyResult) { // Don't show answer separately for copy results
@@ -1990,6 +2572,62 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
                 colorSwatch.style.marginLeft = '8px';
                 colorSwatch.style.flexShrink = '0';
                 resultItem.appendChild(colorSwatch);
+            }
+
+            // Add action buttons for algebra results
+            if (result.type === 'algebra') {
+                const actionContainer = document.createElement('div');
+                actionContainer.className = 'algebra-actions';
+                actionContainer.style.cssText = 'display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;';
+
+                // Copy button
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'algebra-action-btn';
+                copyBtn.innerHTML = scaleIcon(copyIcon, 14) + ' Copy';
+                copyBtn.style.cssText = 'padding: 4px 8px; border: 1px solid #444; border-radius: 4px; background: #2a2a2a; color: #ccc; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 4px;';
+                copyBtn.title = 'Copy solution (Enter)';
+                copyBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(result.answer || '');
+                    copyBtn.textContent = 'Copied!';
+                    setTimeout(() => copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="m5 15-4-4 4-4"/></svg> Copy`, 1000);
+                };
+
+                // AI Explanation button
+                const aiBtn = document.createElement('button');
+                aiBtn.className = 'algebra-action-btn';
+                aiBtn.innerHTML = scaleIcon(brainIcon, 14) + ' AI Steps';
+                aiBtn.style.cssText = 'padding: 4px 8px; border: 1px solid #444; border-radius: 4px; background: #2a2a2a; color: #ccc; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 4px;';
+                aiBtn.title = 'Show step-by-step solution (Shift+Enter)';
+                aiBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    const prompt = `Solve step by step: ${result.equation}. Show clear mathematical steps and explain your work.`;
+                    if (window.activateAIChat) {
+                        window.activateAIChat(prompt);
+                    }
+                };
+
+                // Open in WolframAlpha button
+                const waBtn = document.createElement('button');
+                waBtn.className = 'algebra-action-btn';
+                waBtn.innerHTML = scaleIcon(globeIcon, 14) + ' Wolfram';
+                waBtn.style.cssText = 'padding: 4px 8px; border: 1px solid #444; border-radius: 4px; background: #2a2a2a; color: #ccc; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 4px;';
+                waBtn.title = 'Open in WolframAlpha (Cmd/Ctrl+Shift+Enter)';
+                waBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    const eq = result.normalizedEquation || result.equation;
+                    const [lhs, rhs] = (eq.includes('=') ? eq.split('=') : [eq, '0']);
+                    const waUrl = 'https://www.wolframalpha.com/input?i=' + encodeURIComponent(`solve ${lhs} = ${rhs}`);
+                    window.open(waUrl, '_blank');
+                };
+
+                actionContainer.appendChild(copyBtn);
+                actionContainer.appendChild(aiBtn);
+                actionContainer.appendChild(waBtn);
+                textContainer.appendChild(actionContainer);
+
+                // Store references for keyboard shortcuts
+                resultItem._algebraActions = { copyBtn, aiBtn, waBtn };
             }
 
             // Handle rich suggestions from Google or enriched suggestions
@@ -2114,6 +2752,175 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
             }
 
             switch(result.type) {
+                case 'spelling': {
+                    // Try Dictionary API for suggestions, fallback to Google "did you mean" via search open
+                    const word = (result.word || '').trim();
+                    const titleEl = resultItem.querySelector('.title');
+                    const originalTitle = titleEl ? titleEl.textContent : '';
+                    if (titleEl) titleEl.textContent = `Checking spelling for ${word}...`;
+                    // Use Datamuse for near matches (good for spelling suggestions)
+                    fetch(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&max=1`)
+                        .then(r => r.ok ? r.json() : [])
+                        .then(list => {
+                            const suggestion = (Array.isArray(list) && list[0] && list[0].word) ? list[0].word : '';
+                            const corrected = suggestion || word;
+                            // Copy immediately
+                            navigator.clipboard.writeText(corrected);
+                            if (titleEl) {
+                                titleEl.textContent = `Copied: ${corrected}`;
+                                setTimeout(() => { titleEl.textContent = originalTitle || corrected; }, 1000);
+                            }
+                            // Mark as copy result so Enter repeats copy quickly
+                            result.answer = corrected;
+                            result.isCopyResult = true;
+                        })
+                        .catch(() => {
+                            // Fallback: just copy original word
+                            navigator.clipboard.writeText(word);
+                            if (titleEl) {
+                                titleEl.textContent = `Copied: ${word}`;
+                                setTimeout(() => { titleEl.textContent = originalTitle || word; }, 1000);
+                            }
+                            result.answer = word;
+                            result.isCopyResult = true;
+                        });
+                    break;
+                }
+                case 'define': {
+                    const key = result.word.toLowerCase();
+                    if (defineCache.has(key)) {
+                        const existing = defineCache.get(key);
+                        const titleEl = resultItem.querySelector('.title');
+                        if (titleEl) titleEl.textContent = existing;
+                        // Second press will copy via isCopyResult path; mark as isCopyResult once rendered
+                        result.answer = existing;
+                        result.isCopyResult = true;
+                        return;
+                    }
+                    const titleEl = resultItem.querySelector('.title');
+                    if (titleEl) titleEl.textContent = `Looking up ${result.word}...`;
+                    fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(result.word)}`)
+                        .then(r => r.ok ? r.json() : null)
+                        .then(data => {
+                            let def = '';
+                            try { def = data && data[0] && data[0].meanings && data[0].meanings[0].definitions[0].definition || ''; } catch(_) {}
+                            if (def) {
+                                defineCache.set(key, def);
+                                if (titleEl) titleEl.textContent = def;
+                                result.answer = def;
+                                result.isCopyResult = true;
+                            } else {
+                                const url = `https://www.google.com/search?q=${encodeURIComponent('define ' + result.word)}`;
+                                runtimeSendMessage({ action: "createTab", url });
+                            }
+                        })
+                        .catch(() => {
+                            const url = `https://www.google.com/search?q=${encodeURIComponent('define ' + result.word)}`;
+                            runtimeSendMessage({ action: "createTab", url });
+                        });
+                    break;
+                }
+                case 'weather': {
+                    const key = result.city.toLowerCase();
+                    if (weatherCache.has(key)) {
+                        const existing = weatherCache.get(key);
+                        showInlineAnswer(resultItem, existing);
+                        result.answer = existing;
+                        result.isCopyResult = true;
+                        return;
+                    }
+                    showInlineAnswer(resultItem, `Fetching weather for ${result.city}...`);
+                    const q = encodeURIComponent(result.city);
+                    fetch(`https://wttr.in/${q}?format=%t`)
+                        .then(r => r.ok ? r.text() : '')
+                        .then(t => {
+                            const cleaned = (t || '').trim().replace(/\s+/g,''); // e.g., +60°F → +60°F
+                            const deg = cleaned.replace(/^.*?(-?\+?\d+)/, '$1').replace('F','F').replace('C','C'); //already has the º symbol i didn't realize so this is useless code
+                            const out = /\d/.test(deg) ? deg : '';
+                            if (out) {
+                                weatherCache.set(key, out);
+                                showInlineAnswer(resultItem, out);
+                                result.answer = out;
+                                result.isCopyResult = true;
+                            } else {
+                                const url = `https://www.google.com/search?q=${encodeURIComponent('weather ' + result.city)}`;
+                                runtimeSendMessage({ action: "createTab", url });
+                            }
+                        })
+                        .catch(() => {
+                            const url = `https://www.google.com/search?q=${encodeURIComponent('weather ' + result.city)}`;
+                            runtimeSendMessage({ action: "createTab", url });
+                        });
+                    break;
+                }
+                case 'uuid': {
+                    navigator.clipboard.writeText(result.answer);
+                    const titleEl = resultItem.querySelector('.title');
+                    if (titleEl) {
+                        const o = titleEl.textContent; titleEl.textContent = 'Copied!'; setTimeout(() => { titleEl.textContent = o; }, 800);
+                    }
+                    break;
+                }
+                case 'tracking': {
+                    let url = '';
+                    if (result.carrier === 'ups') url = `https://www.ups.com/track?loc=en_US&tracknum=${encodeURIComponent(result.code)}`;
+                    else if (result.carrier === 'usps') url = `https://tools.usps.com/go/TrackConfirmAction?tLabels=${encodeURIComponent(result.code)}`;
+                    else url = `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(result.code)}`;
+                    runtimeSendMessage({ action: "createTab", url });
+                    break;
+                }
+                case 'text_transform': {
+                    navigator.clipboard.writeText(result.answer);
+                    const titleEl = resultItem.querySelector('.title');
+                    if (titleEl) { const o = titleEl.textContent; titleEl.textContent = 'Copied!'; setTimeout(() => { titleEl.textContent = o; }, 800); }
+                    break;
+                }
+                case 'email_compose': {
+                    const params = new URLSearchParams();
+                    if (result.subject) params.set('subject', result.subject);
+                    if (result.body) params.set('body', result.body);
+                    const mailto = `mailto:${encodeURIComponent(result.address)}${params.toString() ? '?' + params.toString() : ''}`;
+                    runtimeSendMessage({ action: "createTab", url: mailto });
+                    break;
+                }
+                case 'site_search': {
+                    // Ask background for current tab URL to extract domain
+                    runtimeSendMessage({ action: 'getActiveTabInfo' }).then(info => {
+                        try {
+                            const host = new URL(info && info.url ? info.url : location.href).hostname.replace(/^www\./,'');
+                            const q = `site:${host} ${result.siteQuery}`;
+                            const url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+                            runtimeSendMessage({ action: 'createTab', url });
+                        } catch (_) {}
+                    });
+                    break;
+                }
+                case 'bookmark_page': {
+                    runtimeSendMessage({ action: 'bookmarkCurrentPage' });
+                    break;
+                }
+                case 'tab_action': {
+                    runtimeSendMessage({ action: 'tabAction', subaction: result.action, hard: result.hard === true });
+                    break;
+                }
+                case 'screenshot': {
+                    runtimeSendMessage({ action: 'captureScreenshot' });
+                    break;
+                }
+                case 'view_source': {
+                    runtimeSendMessage({ action: 'getActiveTabInfo' }).then(info => {
+                        if (!info || !info.url) return;
+                        const url = `view-source:${info.url}`;
+                        runtimeSendMessage({ action: 'createTab', url });
+                    });
+                    break;
+                }
+                case 'copy_url': {
+                    runtimeSendMessage({ action: 'getActiveTabInfo' }).then(info => {
+                        if (info && info.url) navigator.clipboard.writeText(info.url);
+                    });
+                    break;
+                }
                 case 'engine_suggestion':
                     if (result.engineKey === 'google') {
                         searchInput.value = '';
@@ -2215,7 +3022,7 @@ function displayResults(tabResults, query, suggestions = [], specialOverrideResu
                     }
                     break;
                 case 'color':
-                    activateColorPicker(result);
+                    activateColorPickerStudio(result);
                     break;
                 case 'google':
                     runtimeSendMessage({ action: "createTab", url: `https://www.google.com/search?q=${encodeURIComponent(result.query || result.text || '')}` });
@@ -3033,16 +3840,23 @@ async function activateAIChat(query) {
     followupInput.type = 'text';
     followupInput.placeholder = 'Ask a follow up...';
 
-    const clearButton = document.createElement('button');
-    clearButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14zM10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`;
-    clearButton.className = 'clear-chat-button';
-    clearButton.title = 'Clear chat';
-    clearButton.onclick = () => {
-        clearChatHistory();
-        conversation.length = 0; // Also clear the internal conversation history
+    const newChatBtn2 = document.createElement('button');
+    newChatBtn2.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>`;
+    newChatBtn2.className = 'new-chat-button';
+    newChatBtn2.title = 'Start new chat';
+    newChatBtn2.onclick = () => {
+        const newId = createChatSession('New chat');
+        switchToChatSession(newId);
+        setTimeout(() => { try { followupInput && followupInput.focus(); } catch (_) {} }, 50);
     };
+
+    const stopBtn2 = document.createElement('button');
+    stopBtn2.textContent = 'Stop';
+    stopBtn2.className = 'stop-stream-button';
+    stopBtn2.style.display = 'none';
+    stopBtn2.title = 'Stop generating';
+    stopBtn2.onclick = () => { try { if (window.__currentStreamCancel) window.__currentStreamCancel(); } catch (_) {} };
+    stopButtonEl = stopBtn2;
 
     const sendButton = document.createElement('button');
     sendButton.textContent = 'Send';
@@ -3095,7 +3909,8 @@ async function activateAIChat(query) {
     aiToggle.appendChild(brainBtn);
     followupContainer.appendChild(aiToggle);
     
-    followupContainer.appendChild(clearButton);
+    followupContainer.appendChild(newChatBtn2);
+    followupContainer.appendChild(stopBtn2);
     followupContainer.appendChild(sendButton);
     chatTileContainer.appendChild(followupContainer);
 
@@ -3130,6 +3945,131 @@ function closeChatTile() {
     chatWasHidden = true; // Set this so the restore button appears
     hideChatTile();
     updateRestoreChatButtonVisibility();
+}
+
+// ===============================
+// Color Studio (HSV) Implementation
+// ===============================
+function activateColorPickerStudio(colorResult) {
+    try { document.body.classList.add('chat-active'); } catch (_) {}
+    window.parent.postMessage({ action: "expandForChat" }, "*");
+
+    chatTileContainer.innerHTML = '';
+    chatTileContainer.style.display = 'flex';
+    chatTileContainer.style.height = '460px';
+    chatTileContainer.style.overflow = 'hidden';
+    chatTileContainer.style.flexDirection = 'column';
+
+    const closeButton = document.createElement('button');
+    closeButton.innerHTML = '×';
+    closeButton.className = 'chat-close-button';
+    closeButton.onclick = closeChatTile;
+    chatTileContainer.appendChild(closeButton);
+
+    const settingsButton = document.createElement('button');
+    settingsButton.className = 'chat-settings-button';
+    settingsButton.title = 'Settings';
+    settingsButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33"/></svg>`;
+    settingsButton.onclick = openSettingsPanel;
+    chatTileContainer.appendChild(settingsButton);
+
+    const root = document.createElement('div');
+    root.className = 'cp-container';
+    root.innerHTML = `
+      <div class="cp-header"><div class="cp-title">Color Studio</div><div class="cp-actions"><button class="cp-action eyedrop" title="Eyedropper">👁</button><button class="cp-action copycss" title="Copy CSS vars">CSS</button></div></div>
+      <div class="cp-main">
+        <div class="cp-left">
+          <div class="cp-preview"><div class="cp-preview-swatch"></div><div class="cp-preview-meta"><div class="cp-name"></div><div class="cp-hex"></div></div></div>
+          <div class="cp-sv"><div class="cp-cursor"></div></div>
+          <div class="cp-hue"><div class="cp-hue-thumb"></div></div>
+        </div>
+        <div class="cp-right">
+          <div class="cp-inputs">
+            <label>HEX <input class="cp-hex-input" spellcheck="false" placeholder="#000000"/></label>
+            <label>RGB <div class="cp-rgb"><input class="cp-r" type="number" min="0" max="255"/><input class="cp-g" type="number" min="0" max="255"/><input class="cp-b" type="number" min="0" max="255"/></div></label>
+            <label>HSL <div class="cp-hsl"><input class="cp-h" type="number" min="0" max="360"/><input class="cp-s" type="number" min="0" max="100"/><input class="cp-l" type="number" min="0" max="100"/></div></label>
+          </div>
+          <div class="cp-contrast">
+            <div class="cp-contrast-row"><div class="cp-contrast-sample dark"><span>Aa</span></div><div class="cp-contrast-meta dark">Dark bg: <span class="ratio-dark">--</span></div></div>
+            <div class="cp-contrast-row"><div class="cp-contrast-sample light"><span>Aa</span></div><div class="cp-contrast-meta light">Light bg: <span class="ratio-light">--</span></div></div>
+          </div>
+          <div class="cp-palette"></div>
+        </div>
+      </div>`;
+    chatTileContainer.appendChild(root);
+
+    const initial = colorResult && colorResult.colorData ? { r: colorResult.colorData.r, g: colorResult.colorData.g, b: colorResult.colorData.b } : { r: 255, g: 92, b: 92 };
+    let hsv = rgbToHsv(initial.r, initial.g, initial.b);
+
+    const svEl = root.querySelector('.cp-sv');
+    const cur = root.querySelector('.cp-cursor');
+    const hueEl = root.querySelector('.cp-hue');
+    const hueThumb = root.querySelector('.cp-hue-thumb');
+    const swatch = root.querySelector('.cp-preview-swatch');
+    const nameEl = root.querySelector('.cp-name');
+    const hexEl = root.querySelector('.cp-hex');
+    const hexInput = root.querySelector('.cp-hex-input');
+    const rIn = root.querySelector('.cp-r');
+    const gIn = root.querySelector('.cp-g');
+    const bIn = root.querySelector('.cp-b');
+    const hIn = root.querySelector('.cp-h');
+    const sIn = root.querySelector('.cp-s');
+    const lIn = root.querySelector('.cp-l');
+    const palette = root.querySelector('.cp-palette');
+    const eyedropBtn = root.querySelector('.cp-action.eyedrop');
+    const copyCssBtn = root.querySelector('.cp-action.copycss');
+
+    function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+    function toHex(n) { return n.toString(16).padStart(2, '0'); }
+    function hexFromRgb(r, g, b) { return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase(); }
+    function rgbToHsv(r, g, b) { r/=255; g/=255; b/=255; const max=Math.max(r,g,b), min=Math.min(r,g,b); const d=max-min; let h=0; const s=max===0?0:d/max; const v=max; if(d!==0){ switch(max){ case r: h=((g-b)/d)+(g<b?6:0); break; case g: h=((b-r)/d)+2; break; case b: h=((r-g)/d)+4; break; } h/=6; } return { h:h*360, s:s*100, v:v*100 }; }
+    function hsvToRgb(h, s, v) { h/=360; s/=100; v/=100; let r,g,b; const i=Math.floor(h*6); const f=h*6-i; const p=v*(1-s); const q=v*(1-f*s); const t=v*(1-(1-f)*s); switch(i%6){ case 0:r=v;g=t;b=p;break; case 1:r=q;g=v;b=p;break; case 2:r=p;g=v;b=t;break; case 3:r=p;g=q;b=v;break; case 4:r=t;g=p;b=v;break; case 5:r=v;g=p;b=q;break; } return { r:Math.round(r*255), g:Math.round(g*255), b:Math.round(b*255) }; }
+    function contrastRatio(r1,g1,b1,r2,g2,b2){ const lum=(r,g,b)=>{ const a=[r,g,b].map(v=>{v/=255;return v<=0.03928? v/12.92 : Math.pow((v+0.055)/1.055,2.4);}); return 0.2126*a[0]+0.7152*a[1]+0.0722*a[2];}; const L1=lum(r1,g1,b1), L2=lum(r2,g2,b2); const [hi,lo]=L1>L2?[L1,L2]:[L2,L1]; return ((hi+0.05)/(lo+0.05)).toFixed(2); }
+
+    function update() {
+      hsv.h = (hsv.h + 360) % 360; hsv.s = clamp(hsv.s, 0, 100); hsv.v = clamp(hsv.v, 0, 100);
+      const rgb = hsvToRgb(hsv.h, hsv.s, hsv.v);
+      const hex = hexFromRgb(rgb.r, rgb.g, rgb.b);
+      swatch.style.background = hex; nameEl.textContent = getColorName(rgb.r, rgb.g, rgb.b); hexEl.textContent = `${hex}  rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+      hexInput.value = hex; rIn.value = rgb.r; gIn.value = rgb.g; bIn.value = rgb.b;
+      const hslVals = rgbToHslValues(rgb.r, rgb.g, rgb.b); hIn.value = hslVals.h; sIn.value = hslVals.s; lIn.value = hslVals.l;
+      const hueRgb = hsvToRgb(hsv.h, 100, 100); svEl.style.background = `linear-gradient(to top, rgba(0,0,0,1), rgba(0,0,0,0)), linear-gradient(to right, #fff, rgba(255,255,255,0)), rgb(${hueRgb.r},${hueRgb.g},${hueRgb.b})`;
+      const r = svEl.getBoundingClientRect(); cur.style.left = (r.width * (hsv.s/100)) + 'px'; cur.style.top = (r.height * (1 - hsv.v/100)) + 'px';
+      const hr = hueEl.getBoundingClientRect(); hueThumb.style.left = (hr.width * (hsv.h/360)) + 'px';
+      renderPalette(rgb);
+      root.querySelector('.ratio-dark').textContent = contrastRatio(rgb.r,rgb.g,rgb.b, 11,13,18);
+      root.querySelector('.ratio-light').textContent = contrastRatio(rgb.r,rgb.g,rgb.b, 255,255,255);
+      root.querySelector('.cp-contrast-sample.dark').style.color = hex;
+      root.querySelector('.cp-contrast-sample.light').style.color = hex;
+    }
+
+    function renderPalette(rgb) {
+      palette.innerHTML = '';
+      const list = generateColorPalette(rgb.r, rgb.g, rgb.b); list.unshift(rgb);
+      list.forEach(c => { const el = document.createElement('button'); el.className = 'cp-swatch'; el.style.backgroundColor = `rgb(${c.r},${c.g},${c.b})`; el.title = `rgb(${c.r}, ${c.g}, ${c.b})`; el.onclick = () => { hsv = rgbToHsv(c.r, c.g, c.b); update(); }; palette.appendChild(el); });
+    }
+
+    const onSvPointer = (x, y) => { const rect = svEl.getBoundingClientRect(); const px = Math.max(0, Math.min(rect.width, x - rect.left)); const py = Math.max(0, Math.min(rect.height, y - rect.top)); hsv.s = (px/rect.width) * 100; hsv.v = (1 - py/rect.height) * 100; update(); };
+    svEl.addEventListener('pointerdown', e => { svEl.setPointerCapture(e.pointerId); onSvPointer(e.clientX, e.clientY); });
+    svEl.addEventListener('pointermove', e => { if (svEl.hasPointerCapture && svEl.hasPointerCapture(e.pointerId)) onSvPointer(e.clientX, e.clientY); });
+    svEl.addEventListener('pointerup',   e => { try { svEl.releasePointerCapture(e.pointerId); } catch (_) {} });
+
+    const onHuePointer = (x) => { const rect = hueEl.getBoundingClientRect(); const px = Math.max(0, Math.min(rect.width, x - rect.left)); hsv.h = (px/rect.width) * 360; update(); };
+    hueEl.addEventListener('pointerdown', e => { hueEl.setPointerCapture(e.pointerId); onHuePointer(e.clientX); });
+    hueEl.addEventListener('pointermove', e => { if (hueEl.hasPointerCapture && hueEl.hasPointerCapture(e.pointerId)) onHuePointer(e.clientX); });
+    hueEl.addEventListener('pointerup',   e => { try { hueEl.releasePointerCapture(e.pointerId); } catch (_) {} });
+
+    hexInput.addEventListener('change', () => { const v = (hexInput.value || '').trim().replace('#',''); if (/^[0-9a-fA-F]{6}$/.test(v)) { const r = parseInt(v.slice(0,2),16), g = parseInt(v.slice(2,4),16), b = parseInt(v.slice(4,6),16); hsv = rgbToHsv(r,g,b); update(); }});
+    [rIn,gIn,bIn].forEach(el => el.addEventListener('change', () => { const r = Math.max(0, Math.min(255, parseInt(rIn.value||'0',10))); const g = Math.max(0, Math.min(255, parseInt(gIn.value||'0',10))); const b = Math.max(0, Math.min(255, parseInt(bIn.value||'0',10))); hsv = rgbToHsv(r,g,b); update(); }));
+    [hIn,sIn,lIn].forEach(el => el.addEventListener('change', () => { let h = parseFloat(hIn.value||'0'); h = (h%360+360)%360; let s = Math.max(0, Math.min(100, parseFloat(sIn.value||'0'))); let l = Math.max(0, Math.min(100, parseFloat(lIn.value||'0'))); const rgb = hslToRgb(h/360, s/100, l/100); hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]); update(); }));
+
+    if ('EyeDropper' in window) {
+      eyedropBtn.addEventListener('click', async () => { try { const ed = new window.EyeDropper(); const res = await ed.open(); const hx = res.sRGBHex.replace('#',''); const r = parseInt(hx.slice(0,2),16), g = parseInt(hx.slice(2,4),16), b = parseInt(hx.slice(4,6),16); hsv = rgbToHsv(r,g,b); update(); } catch (_) {} });
+    } else { eyedropBtn.disabled = true; eyedropBtn.title = 'Eyedropper not supported'; }
+
+    copyCssBtn.addEventListener('click', () => { const rgb = hsvToRgb(hsv.h, hsv.s, hsv.v); const hex = hexFromRgb(rgb.r, rgb.g, rgb.b); const css = `:root{\n  --brand:${hex};\n  --brand-rgb:${rgb.r}, ${rgb.g}, ${rgb.b};\n  --brand-hsl:${rgbToHsl(rgb.r, rgb.g, rgb.b)};\n}`; try { navigator.clipboard.writeText(css); copyCssBtn.textContent = 'Copied!'; setTimeout(() => copyCssBtn.textContent = 'CSS', 1000); } catch (_) {} });
+
+    update();
 }
 
 function hideChatTile() {
@@ -3340,7 +4280,10 @@ function postRenderEnhancements(messageEl) {
             const host = document.createElement('div');
             host.className = 'html-display-box';
             const shadow = host.attachShadow({ mode: 'open' });
-            const sanitized = sanitizeHtmlForDisplay(hdr.content);
+            // Enforce neutral background within HTML content to avoid overriding extension background
+            const sanitized = sanitizeHtmlForDisplay(hdr.content)
+              .replace(/<body(\s+[^>]*)?>/i, '<div$1>')
+              .replace(/<\/body>/i, '</div>');
             shadow.innerHTML = sanitized;
             // Enforce sensible viewport with hard caps
             const DEFAULT_W = 800, DEFAULT_H = 500;
@@ -3386,17 +4329,30 @@ function renderLatex(latex, isBlock = false) {
 
     const recurse = (str) => renderLatex(str, false);
 
+    // Pre-normalize a few common malformed inputs
+    html = html
+        .replace(/\\beginpmatrix/g, '\\begin{pmatrix}')
+        .replace(/\\endpmatrix/g, '\\end{pmatrix}')
+        .replace(/\\beginbmatrix/g, '\\begin{bmatrix}')
+        .replace(/\\endbmatrix/g, '\\end{bmatrix}');
+
     // 0. Protect text environments first
     html = html.replace(/\\text\{([^}]+)\}/g, (match, text) => `<span class="latex-text">${text}</span>`);
 
-    // 1. Environments (align, matrix)
-    html = html.replace(/\\begin\{(bmatrix|align\*)\}([\s\S]*?)\\end\{(bmatrix|align\*)\}/g, (match, env, content) => {
-        const className = env === 'bmatrix' ? 'latex-matrix' : 'latex-align';
+    // 1. Environments (align, matrix variants)
+    html = html.replace(/\\begin\{(bmatrix|pmatrix|align\*?)\}([\s\S]*?)\\end\{\1\}/g, (match, env, content) => {
         const rows = content.trim().split(/\\\\|\\cr/g).map(row => {
             const cells = row.split('&').map(cell => `<td>${recurse(cell.trim())}</td>`).join('');
             return `<tr>${cells}</tr>`;
         }).join('');
-        return `<table class="${className}"><tbody>${rows}</tbody></table>`;
+        if (env === 'align' || env === 'align*') {
+            return `<table class="latex-align"><tbody>${rows}</tbody></table>`;
+        }
+        if (env === 'pmatrix') {
+            return `<span class="latex-lparen">(</span><table class="latex-matrix"><tbody>${rows}</tbody></table><span class="latex-rparen">)</span>`;
+        }
+        // bmatrix default
+        return `<table class="latex-matrix"><tbody>${rows}</tbody></table>`;
     });
 
     // 2. Commands with arguments (fractions, roots, fonts, etc.)
@@ -3405,6 +4361,8 @@ function renderLatex(latex, isBlock = false) {
     html = html.replace(/\\sqrt\{([^}]+)\}/g, (match, content) => `√(${recurse(content)})`);
     html = html.replace(/\\mathbb\{([^}]+)\}/g, (match, content) => `<span class="latex-mathbb">${content}</span>`);
     html = html.replace(/\\vec\{([^}]+)\}/g, (match, content) => `<span class="latex-vec">${recurse(content)}</span>`);
+    html = html.replace(/\\mathbf\{([^}]+)\}/g, (match, content) => `<strong class="latex-text">${recurse(content)}</strong>`);
+    html = html.replace(/\\mathbf([A-Za-z0-9])/g, (match, ch) => `<strong class="latex-text">${ch}</strong>`);
 
     // 3. Delimiters
     html = html.replace(/\\left\(/g, '<span class="latex-lparen">(</span>').replace(/\\right\)/g, '<span class="latex-rparen">)</span>');
@@ -3444,6 +4402,23 @@ function renderLatex(latex, isBlock = false) {
     return html.replace(/\{|\}/g, '');
 }
 
+// Prefer KaTeX when available; fall back to local renderer
+function renderWithKatex(latex, displayMode = false) {
+    try {
+        const kx = (typeof window !== 'undefined' && window.katex) ? window.katex : (typeof self !== 'undefined' ? self.katex : null);
+        if (kx && typeof kx.renderToString === 'function') {
+            return kx.renderToString(String(latex || ''), {
+                displayMode: !!displayMode,
+                throwOnError: false,
+                strict: 'ignore',
+                trust: true
+            });
+        }
+    } catch (_) {}
+    // Fallback to lightweight renderer
+    return renderLatex(String(latex || ''), !!displayMode);
+}
+
 // Enhanced markdown parser with tables, LaTeX, and better formatting
 function parseMarkdown(text) {
     const protectedContent = {};
@@ -3461,9 +4436,9 @@ function parseMarkdown(text) {
             let finalContent;
 
             if (item.type === 'latex-block') {
-                finalContent = `<div class="latex-block">${renderLatex(item.content, true)}</div>`;
+                finalContent = `<div class="latex-block">${renderWithKatex(item.content, true)}</div>`;
             } else if (item.type === 'latex-inline') {
-                finalContent = `<span class="latex-inline">${renderLatex(item.content, false)}</span>`;
+                finalContent = `<span class="latex-inline">${renderWithKatex(item.content, false)}</span>`;
             } else {
                 finalContent = item.content; // Already pre-formatted HTML
             }
@@ -3476,6 +4451,13 @@ function parseMarkdown(text) {
     let processedText = text
         .replace(/```latex\n?([\s\S]*?)```/g, (match, latex) => protect(latex, 'latex-block'))
         .replace(/<latex>(.*?)<\/latex>/g, (match, latex) => protect(latex, 'latex-inline'))
+        // LaTeX inline/block delimiters
+        .replace(/\\\(([\s\S]*?)\\\)/g, (match, latex) => protect(latex, 'latex-inline'))
+        .replace(/\\\[([\s\S]*?)\\\]/g, (match, latex) => protect(latex, 'latex-block'))
+        // Support $$...$$ blocks (inline or multiline). Prefer block if content spans lines.
+        .replace(/\$\$([\s\S]*?)\$\$/g, (match, latex) => protect(latex, /\n/.test((latex || '').trim()) ? 'latex-block' : 'latex-inline'))
+        // Generic \begin{env} ... \end{env}
+        .replace(/\\begin\{([a-zA-Z*]+)\}([\s\S]*?)\\end\{\1\}/g, (match, _env, content) => protect(content, 'latex-block'))
         .replace(/```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/g, (match, lang, code) => 
             protect(`<pre><code class="language-${lang || 'plaintext'}">${code}</code></pre>`, 'html'))
         .replace(/`([^`]+)`/g, (match, code) => protect(`<code>${code}</code>`, 'html'));
@@ -3823,17 +4805,41 @@ function search(query) {
     const bookmarkPromise = runtimeSendMessage({ action: "searchBookmarks", query: query });
 
     if (!query.trim()) {
-        // Empty input: show top Switch to Tab items AND a top AI action
-        const promise = tabSearch.then(tabResults => {
+        // Empty input: show AI quick action, optional clipboard URL, and top tabs
+        const promise = tabSearch.then(async (tabResults) => {
             // Build a top AI action item for the current page context
             const aiQuick = {
                 type: 'ai_quick',
                 title: 'Get context for this page (AI)',
                 hint: 'Press Enter to analyze this page deeply',
             };
-            // Prepend AI quick item to the results
-            const precomputed = [aiQuick, ...tabResults.map(tab => ({ ...tab, type: 'tab', text: tab.title }))];
-            return displayResults(tabResults, query, [], null, precomputed);
+
+            const items = [aiQuick];
+
+            // Attempt to read clipboard and surface URL as a navigation item
+            try {
+                const clipText = await navigator.clipboard.readText();
+                if (clipText && typeof clipText === 'string') {
+                    let url;
+                    try { url = new URL(clipText.trim()); } catch (_) { url = null; }
+                    if (url && (url.protocol === 'http:' || url.protocol === 'https:')) {
+                        const domain = url.hostname.replace(/^www\./, '').toLowerCase();
+                        items.push({
+                            type: 'navigation',
+                            title: `Go to ${domain}`,
+                            url: url.toString(),
+                            domain,
+                            favicon: `https://www.google.com/s2/favicons?domain=${domain}&sz=32`,
+                            fromClipboard: true
+                        });
+                    }
+                }
+            } catch (_) { /* ignore clipboard errors */ }
+
+            // Then add tab items
+            items.push(...tabResults.map(tab => ({ ...tab, type: 'tab', text: tab.title })));
+
+            return displayResults(tabResults, query, [], null, items);
         });
         currentSearchPromise = promise;
         return promise;
@@ -4134,6 +5140,13 @@ searchInput.addEventListener('keydown', (e) => {
         }
     }
     
+    // ESC closes the palette (tell parent to close)
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        try { window.parent.postMessage({ action: 'close' }, '*'); } catch (_) {}
+        return;
+    }
+    
     if (items.length === 0) return;
 
     switch (e.key) {
@@ -4145,6 +5158,27 @@ searchInput.addEventListener('keydown', (e) => {
         case 'ArrowUp':
             e.preventDefault();
             selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+            updateSelection();
+            break;
+
+        case 'Home':
+            e.preventDefault();
+            selectedIndex = 0;
+            updateSelection();
+            break;
+        case 'End':
+            e.preventDefault();
+            selectedIndex = items.length - 1;
+            updateSelection();
+            break;
+        case 'PageDown':
+            e.preventDefault();
+            selectedIndex = Math.min(items.length - 1, selectedIndex + 5);
+            updateSelection();
+            break;
+        case 'PageUp':
+            e.preventDefault();
+            selectedIndex = Math.max(0, selectedIndex - 5);
             updateSelection();
             break;
         case 'Enter':
@@ -4185,19 +5219,68 @@ searchInput.addEventListener('keydown', (e) => {
                         return;
                     }
                     
-                    const openInNewTab = e.shiftKey !== true; // default: new tab; Shift: current tab
+                    // Default: open in new tab. Shift: current tab. Ctrl/Cmd+Enter: background tab
+                    const background = (e.ctrlKey || e.metaKey) && !e.shiftKey;
+                    const openInNewTab = e.shiftKey !== true;
+                    // Special handling: algebra equations solved locally
+                    if (selectedResult && selectedResult.type === 'algebra') {
+                        if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
+                            // Cmd/Ctrl+Shift+Enter: Open in WolframAlpha
+                            const eq = selectedResult.normalizedEquation || selectedResult.equation;
+                            const [lhs, rhs] = (eq.includes('=') ? eq.split('=') : [eq, '0']);
+                            const waUrl = 'https://www.wolframalpha.com/input?i=' + encodeURIComponent(`solve ${lhs} = ${rhs}`);
+                            window.open(waUrl, '_blank');
+                        } else if (e.shiftKey) {
+                            // Shift+Enter: AI explanation
+                            const prompt = `Solve step by step: ${selectedResult.equation}. Show clear mathematical steps and explain your work.`;
+                            activateAIChat(prompt);
+                        } else {
+                            // Enter: Copy solution
+                            navigator.clipboard.writeText(String(selectedResult.answer || ''));
+                            const resultItem = updatedItems[selectedIndex];
+                            const titleElement = resultItem.querySelector('.title');
+                            if (titleElement) {
+                                const originalText = titleElement.textContent;
+                                titleElement.textContent = 'Copied!';
+                                setTimeout(() => { titleElement.textContent = originalText; }, 1000);
+                            }
+                        }
+                        return;
+                    }
+                    // Special handling: weather Shift+Enter toggles F/C conversion inline
+                    if (selectedResult && selectedResult.type === 'weather') {
+                        if (e.shiftKey) {
+                            const ans = String(selectedResult.answer || '');
+                            let converted = ans;
+                            const mF = ans.match(/(-?\+?\d+)º?F/i);
+                            const mC = ans.match(/(-?\+?\d+)º?C/i);
+                            if (mF) {
+                                const F = parseInt(mF[1], 10);
+                                const C = Math.round((F - 32) * 5 / 9);
+                                converted = `${C}ºC`;
+                            } else if (mC) {
+                                const C = parseInt(mC[1], 10);
+                                const F = Math.round((C * 9) / 5 + 32);
+                                converted = `${F}ºF`;
+                            }
+                            selectedResult.answer = converted;
+                            const resultItem = updatedItems[selectedIndex];
+                            showInlineAnswer(resultItem, converted);
+                            return;
+                        }
+                    }
                     if (selectedResult.type === 'suggestion') {
                         const url = `https://www.google.com/search?q=${encodeURIComponent(selectedResult.text)}`;
-                        runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url });
+                        runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url, background });
                     } else if (selectedResult.type === 'google') {
                         const url = `https://www.google.com/search?q=${encodeURIComponent(selectedResult.query || selectedResult.text || '')}`;
-                        runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url });
+                        runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url, background });
                     } else if (selectedResult.type === 'app_search') {
                         const url = selectedResult.url;
-                        runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url });
+                        runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url, background });
                     } else if (selectedResult.type === 'navigation') {
                         const url = selectedResult.url;
-                        runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url });
+                        runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url, background });
                     } else if (selectedResult.type === 'tab') {
                         updatedItems[selectedIndex].click();
                     } else if (selectedResult.type === 'ai') {
@@ -4208,13 +5291,60 @@ searchInput.addEventListener('keydown', (e) => {
                     }
                 } else if (currentQuery.trim()) {
                     // If no results or invalid selection, search Google for the current query
+                    const background = (e.ctrlKey || e.metaKey) && !e.shiftKey;
                     const openInNewTab = e.shiftKey !== true; // default: new tab; Shift: current tab
-                    runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url: `https://www.google.com/search?q=${encodeURIComponent(currentQuery)}` });
+                    runtimeSendMessage({ action: openInNewTab ? "createTab" : "navigateCurrentTab", url: `https://www.google.com/search?q=${encodeURIComponent(currentQuery)}`, background });
                 }
             });
             break;
     }
 });
+
+// Additional hotkeys on the whole document to support Alt+1..9 to open result
+document.addEventListener('keydown', (e) => {
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        const n = parseInt(e.key, 10);
+        if (!isNaN(n) && n >= 1 && n <= 9) {
+            const items = resultsDiv.querySelectorAll('.result-item');
+            const index = n - 1;
+            if (index < items.length) {
+                e.preventDefault();
+                selectedIndex = index;
+                updateSelection();
+                items[index].click();
+            }
+        }
+    }
+    // Alt+P toggles pin
+    if (e.altKey && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        togglePin();
+    }
+    // Ctrl/Cmd+C copies selected result's primary text or URL
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        const items = resultsDiv.querySelectorAll('.result-item');
+        if (selectedIndex >= 0 && selectedIndex < items.length) {
+            const result = items[selectedIndex].__result || currentResults[selectedIndex];
+            let text = '';
+            if (result) {
+                if (result.url) text = result.url;
+                else if (result.text) text = result.text;
+                else if (result.title) text = result.title;
+            }
+            if (text) {
+                e.preventDefault();
+                try { navigator.clipboard.writeText(text); } catch (_) {}
+                // lightweight feedback via title swap if available
+                const titleElement = items[selectedIndex].querySelector('.title');
+                if (titleElement) {
+                    const originalText = titleElement.textContent;
+                    titleElement.textContent = 'Copied!';
+                    setTimeout(() => { titleElement.textContent = originalText; }, 700);
+                }
+            }
+        }
+    }
+}, true);
 
 pinButton.addEventListener('click', togglePin);
 
@@ -4902,12 +6032,26 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
                     }
                 }
                 streamHandlers.delete(streamId);
+                try { if (stopButtonEl) stopButtonEl.style.display = 'none'; } catch (_) {}
             } else {
                 // We chained a follow-up stream; just clean up this handler
                 streamHandlers.delete(streamId);
+                try { if (stopButtonEl) stopButtonEl.style.display = 'none'; } catch (_) {}
             }
         }
     });
+
+    // Expose a cancel handle for UI stop button
+    try {
+        // Cancel by removing the handler so incoming tokens are ignored and finalize quickly
+        window.__currentStreamCancel = () => {
+            try { streamHandlers.delete(streamId); } catch (_) {}
+            // Hide the stop button if visible
+            try { if (stopButtonEl) stopButtonEl.style.display = 'none'; } catch (_) {}
+        };
+        // Show the stop button during streaming
+        if (stopButtonEl) stopButtonEl.style.display = 'inline-flex';
+    } catch (_) {}
 
     runtimeSendMessage({ action: apiAction, messages: conversation, options: apiOptions, streamId });
 }

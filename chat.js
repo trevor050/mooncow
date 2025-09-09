@@ -368,6 +368,16 @@ ${externalContext || '(none)'}
 - Attribute statements to sources with compact citations (2–5 links). Put links next to claims.
 - When missing data or uncertain, say so and propose targeted next steps (what to read/search next).
 - No raw payload dumps; summarize and synthesize.
+- Format all LaTeX equations using $$[Latex]$$ for multilines use:
+$$
+[Latex]
+$$
+
+
+
+## Visual/Theme Constraints (important)
+- The extension uses a dark, glassy background. Do not change the extension’s background color or overall theme via HTML/CSS in your output unless the user explicitly asks you to.
+- If you render HTML blocks, ensure their background is neutral and distinct from the chat background so text remains readable. Prefer light-on-dark content boxes with subtle borders and avoid full-bleed background overrides.
 
 ---
 

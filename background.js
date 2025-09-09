@@ -149,7 +149,8 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.action === "createTab") {
-        browser.tabs.create({ url: message.url, active: true });
+        const active = message.background ? false : true;
+        browser.tabs.create({ url: message.url, active });
         return false;
     }
     
@@ -162,6 +163,79 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
             browser.tabs.create({ url: message.url, active: true });
         }
         return false;
+    }
+    
+    if (message.action === 'getActiveTabInfo') {
+        const targetTabIdPromise = sender && sender.tab && sender.tab.id
+            ? Promise.resolve(sender.tab.id)
+            : browser.tabs.query({ active: true, currentWindow: true }).then(tabs => tabs[0]?.id);
+        targetTabIdPromise.then(id => {
+            if (typeof id !== 'number') { sendResponse({}); return; }
+            browser.tabs.get(id).then(tab => sendResponse({ id: tab.id, url: tab.url || tab.pendingUrl || '', title: tab.title || '' }))
+                .catch(() => sendResponse({}));
+        });
+        return true;
+    }
+
+    if (message.action === 'tabAction') {
+        const sub = message.subaction;
+        const hard = message.hard === true;
+        const getTab = sender && sender.tab && sender.tab.id ? Promise.resolve(sender.tab.id) : browser.tabs.query({ active: true, currentWindow: true }).then(t => t[0]?.id);
+        getTab.then(id => {
+            if (typeof id !== 'number') { sendResponse({ ok: false }); return; }
+            switch (sub) {
+                case 'duplicate': browser.tabs.duplicate(id); break;
+                case 'reload': browser.tabs.reload(id, { bypassCache: hard }); break;
+                case 'back': browser.tabs.goBack(id).catch(() => {}); break;
+                case 'forward': browser.tabs.goForward(id).catch(() => {}); break;
+                case 'pin': browser.tabs.update(id, { pinned: true }); break;
+                case 'unpin': browser.tabs.update(id, { pinned: false }); break;
+                case 'mute': browser.tabs.update(id, { muted: true }); break;
+                case 'unmute': browser.tabs.update(id, { muted: false }); break;
+                case 'close': browser.tabs.remove(id); break;
+                case 'move_to_new_window':
+                    browser.tabs.get(id).then(tab => {
+                        browser.windows.create({ tabId: id, focused: true });
+                    }).catch(() => {});
+                    break;
+                case 'new_tab':
+                    browser.tabs.create({ url: 'about:newtab' });
+                    break;
+                case 'new_window':
+                    browser.windows.create({});
+                    break;
+            }
+            sendResponse({ ok: true });
+        });
+        return true;
+    }
+
+    if (message.action === 'bookmarkCurrentPage') {
+        const getTab = sender && sender.tab && sender.tab.id ? Promise.resolve(sender.tab.id) : browser.tabs.query({ active: true, currentWindow: true }).then(t => t[0]?.id);
+        getTab.then(id => {
+            if (typeof id !== 'number') { sendResponse({ ok: false }); return; }
+            browser.tabs.get(id).then(tab => {
+                browser.bookmarks.create({ title: tab.title || tab.url || 'Bookmark', url: tab.url || '' })
+                    .then(() => sendResponse({ ok: true }))
+                    .catch(() => sendResponse({ ok: false }));
+            }).catch(() => sendResponse({ ok: false }));
+        });
+        return true;
+    }
+
+    if (message.action === 'captureScreenshot') {
+        // Try capture from the sender's window first; fall back to current active
+        const getWinId = sender && sender.tab && sender.tab.windowId
+            ? Promise.resolve(sender.tab.windowId)
+            : browser.windows.getCurrent().then(w => w && w.id);
+        getWinId.then(windowId => {
+            if (typeof windowId !== 'number') { sendResponse({ ok: false }); return; }
+            browser.tabs.captureVisibleTab(windowId, { format: 'png' })
+                .then(dataUrl => browser.downloads.download({ url: dataUrl, filename: 'mooncow-screenshot.png', saveAs: false }))
+                .then(() => sendResponse({ ok: true }))
+                .catch(err => { console.warn('screenshot failed', err); sendResponse({ ok: false, error: String(err) }); });
+        }).catch(err => { console.warn('captureScreenshot winId failed', err); sendResponse({ ok: false }); });
+        return true;
     }
     
     if (message.action === "open_options") {

@@ -258,6 +258,9 @@ When you can see a screenshot of the user's screen:
 Use comprehensive markdown formatting:
 - **Headers** with \`#\`, \`##\`, \`###\`, \`####\` for structure
 - **Tables** for organized data (max 5 columns)
+### **Theme & Background Rules**
+- Do not change the extension’s background color or theme via HTML/CSS in your response unless explicitly requested by the user.
+- If you emit optional HTML blocks, keep their background neutral and visually distinct from the chat background to ensure readability (light-on-dark content boxes, subtle borders; avoid full-bleed backgrounds).
 - **Lists** (bulleted and numbered) with proper nesting
 - **Code blocks** with \`\`\`language syntax
 - **LaTeX equations**: 
