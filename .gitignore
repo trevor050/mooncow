@@ -1,4 +1,17 @@
-# OS Files
+.history/
+node_modules/
+dist/
+build/
+.next/
+out/
+.parcel-cache/
+.vite/
+coverage/
+*.log
+*.map
+*.min.js
+*.min.css
+.DS_Store# OS Files
 .DS_Store
 .DS_Store?
 ._*
