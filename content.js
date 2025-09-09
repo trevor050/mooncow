@@ -9,6 +9,16 @@ document.addEventListener('keydown', (event) => {
     event.stopImmediatePropagation();
     toggleSearch();
   }
+  // Global Esc closes the palette if open
+  if (event.key === 'Escape') {
+    const existingIframe = document.getElementById(iframeId);
+    if (existingIframe) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      closeSearch();
+    }
+  }
 }, true); // Use capture phase to ensure we get the event first
 
 function closeSearch() {
@@ -43,7 +53,7 @@ function handleOutsideClick(event) {
     }
 }
 
-function toggleSearch() {
+async function toggleSearch() {
   const existingIframe = document.getElementById(iframeId);
 
   if (existingIframe) {
@@ -91,6 +101,19 @@ function toggleSearch() {
       }
     `;
     document.head.appendChild(style);
+    
+    // Try to restore last position (pixel mode). Do this before attaching to minimize jumping
+    try {
+      if (browser && browser.storage && browser.storage.local) {
+        const saved = await browser.storage.local.get('mooncowPanelPos');
+        const pos = saved && saved.mooncowPanelPos;
+        if (pos && typeof pos.top === 'number' && typeof pos.left === 'number') {
+          iframe.style.setProperty('transform', 'none', 'important');
+          iframe.style.top = `${pos.top}px`;
+          iframe.style.left = `${pos.left}px`;
+        }
+      }
+    } catch (_) {}
     
     // Ensure focus happens when iframe is loaded
     iframe.onload = () => {
@@ -140,6 +163,10 @@ window.addEventListener('message', (event) => {
       console.log('After setting position - new rect:', newRect);
       break;
     }
+    case "close": {
+      closeSearch();
+      break;
+    }
     case "moveDrag": {
       const curTop = parseFloat(iframe.style.top) || 0;
       const curLeft = parseFloat(iframe.style.left) || 0;
@@ -150,6 +177,13 @@ window.addEventListener('message', (event) => {
     case "endDrag": {
       iframe.style.transition = '';
       // Leave it in pixel mode - don't restore the percentage positioning
+      try {
+        const top = parseFloat(iframe.style.top) || 0;
+        const left = parseFloat(iframe.style.left) || 0;
+        if (browser && browser.storage && browser.storage.local) {
+          browser.storage.local.set({ mooncowPanelPos: { top, left } });
+        }
+      } catch (_) {}
       break;
     }
     case "togglePin":

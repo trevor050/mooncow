@@ -74,7 +74,9 @@
     "https://nominatim.openstreetmap.org/*",
     "https://www.courtlistener.com/*",
     "https://www.federalregister.gov/*",
-    "https://www.scotusblog.com/*"
+    "https://www.scotusblog.com/*",
+    "https://api.dictionaryapi.dev/*",
+    "https://wttr.in/*"
   ],
   "background": {
     "scripts": [
@@ -91,7 +93,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["search.html", "style.css", "search.js", "ranking.js"],
+      "resources": ["search.html", "style.css", "search.js", "ranking.js", "nerdamer.js"],
       "matches": ["<all_urls>"]
     }
   ],

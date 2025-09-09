@@ -63,6 +63,7 @@
         convert: ["to", "in", "convert"],
         time: ["time", "clock", "timezone"],
         setting: ["setting", "settings", "prefs"],
+        spelling: ["spell", "spelling", "correct spelling", "how to spell", "how do you spell"],
     };
 
     // Adaptive memory (simple map: queryPrefix -> {type -> count})
@@ -144,10 +145,62 @@
         return 0;
     }
 
+    // Algebra detector – recognizes simple single-variable equations like:
+    // 5x = 5, 5x + 3 = 8, 5x + 3 = 3x + 5, 5y + 3 = 3y + 5
+    // Purpose here is only intent detection (not solving) so we keep it lightweight.
+    function isAlgebraEquation(query) {
+        if (!query) return false;
+        const q = String(query).toLowerCase();
+
+        // Must contain exactly one '=' separating two sides
+        const equalsMatches = q.match(/=/g) || [];
+        if (equalsMatches.length !== 1) return false;
+        const [leftRaw, rightRaw] = q.split('=');
+        const left = leftRaw.trim();
+        const right = rightRaw.trim();
+        if (!left || !right) return false;
+
+        // Extract letters; allow exactly one distinct variable letter (a-z)
+        const letters = q.match(/[a-z]/g) || [];
+        if (letters.length === 0) return false;
+        const uniqueLetters = Array.from(new Set(letters));
+        if (uniqueLetters.length !== 1) return false;
+        const variable = uniqueLetters[0];
+
+        // Only allow digits, whitespace, decimal dot, + - * / ( ), and the variable
+        const allowed = new RegExp(`^[0-9\\s.+\\-*/()${variable}]+$`);
+        if (!allowed.test(left) || !allowed.test(right)) return false;
+
+        // Quick sanity: at least one side contains the variable
+        if (!left.includes(variable) && !right.includes(variable)) return false;
+
+        // Balanced parentheses on both sides
+        const isBalanced = (s) => {
+            let depth = 0;
+            for (let i = 0; i < s.length; i++) {
+                const ch = s[i];
+                if (ch === '(') depth++;
+                else if (ch === ')') { depth--; if (depth < 0) return false; }
+            }
+            return depth === 0;
+        };
+        if (!isBalanced(left) || !isBalanced(right)) return false;
+
+        // Minimal token sanity: disallow consecutive operator runs like **, //, ++ (unary +/- still ok)
+        const badOps = /([*/]{2,})|((?<![\d)${variable}])[+\-]{2,}(?![\d(]))/;
+        const leftClean = left.replace(/\s+/g, '');
+        const rightClean = right.replace(/\s+/g, '');
+        if (badOps.test(leftClean) || badOps.test(rightClean)) return false;
+
+        return true;
+    }
+
     function detectIntent(query) {
         const q = (query || '').toLowerCase().trim();
         // AI: only if explicitly prefixed or clearly natural language
         if (/^ai\b[:/]?\s*/.test(q)) return 'ai';
+        // Algebra: single-variable equation detection
+        if (isAlgebraEquation(q)) return 'algebra';
         // Calculator handled separately by detectors
         for (const [intent, list] of Object.entries(KEYWORDS)) {
             if (intent === 'ai') continue; // already handled
@@ -211,8 +264,13 @@
         let base;
         switch (cand.type) {
             case "calculator": case "converter": case "time": case "color": case "qr": case "password": case "hash": case "url_shorten": case "ip_lookup": case "lorem": case "coin_flip": case "roll_die": case "random_number": case "user_agent": case "base64_encode": case "base64_decode":
+            case "define": case "weather": case "uuid": case "tracking": case "text_transform": case "email_compose": case "bookmark_page": case "tab_action": case "screenshot": case "view_source": case "copy_url": case "percentage": case "tip": case "split_bill": case "base_convert":
+            case "algebra":
+                base = CATEGORY_BASE.quick_answer + 300; break; // Ensure algebra ranks above AI
+            case "spelling":
                 base = CATEGORY_BASE.quick_answer; break;
             case "app_search": base = CATEGORY_BASE.app_search; break;
+            case "site_search": base = CATEGORY_BASE.google; break;
             case "navigation": base = CATEGORY_BASE.navigation; break;
             case "google": base = CATEGORY_BASE.google; break;
             case "ai": base = CATEGORY_BASE.ai; break;
@@ -252,21 +310,30 @@
             matchScore = (sim * 400) + (overlap * 200);
         }
 
-        // 2.5. Question Bonus for AI (prefer explicit AI prefix or natural questions)
+        // 2.5. Intent detection (needed for various bonuses)
+        const intent = detectIntent(query);
+
+        // 2.6. Question Bonus for AI (prefer explicit AI prefix or natural questions)
         const isQuestion = looksLikeNaturalLanguageQuestion(query);
         let questionBonus = 0;
         if (cand.type === 'ai' && isQuestion) {
-            questionBonus = 3000; // Boosts AI score to ~12500, above even quick_answers for questions
+            // If intent is algebra, do NOT let AI outrank algebra quick-answer.
+            // Otherwise, keep strong AI boost for natural language questions.
+            questionBonus = intent === 'algebra' ? 0 : 3000;
         }
 
         // 3. Intent bonus
-        const intent = detectIntent(query);
         let intentBonus = 0;
         if (intent === "ai" && cand.type === "ai") intentBonus = 2000; // stronger when explicitly prefixed
         else if (intent === "calc" && cand.type === "calculator") intentBonus = 350;
         else if (intent === "convert" && cand.type === "converter") intentBonus = 300;
+        // Tiny boost for define/weather intents by keyword
+        else if (/\bdefine\b/i.test(query) && cand.type === 'define') intentBonus = 400;
+        else if (/\b(weather|forecast|temp)\b/i.test(query) && cand.type === 'weather') intentBonus = 1200;
+        else if (intent === 'algebra' && cand.type === 'algebra') intentBonus = 1500;
         else if (intent === "time" && cand.type === "time") intentBonus = 250;
         else if (intent === "setting" && cand.type === "setting") intentBonus = 250;
+        else if (intent === "spelling" && cand.type === "spelling") intentBonus = 600;
 
         // 4. Frecency / history relevance
         const frec = frecencyScore(cand);
@@ -312,12 +379,18 @@
             if (c.type === 'navigation') return true;
             // Never drop explicit app searches; these are user-intent picks
             if (c.type === 'app_search') return true;
+            // Always keep known quick-action types so they surface reliably
+            const keepTypes = new Set([
+                'calculator','converter','time','color','qr','password','hash','url_shorten','ip_lookup','lorem','coin_flip','roll_die','random_number','user_agent','base64_encode','base64_decode',
+                'define','weather','uuid','tracking','text_transform','email_compose','bookmark_page','tab_action','screenshot','view_source','copy_url','percentage','tip','split_bill','base_convert','site_search','algebra','spelling'
+            ]);
+            if (keepTypes.has(c.type)) return true;
             // Tabs must pass strict title/URL prefix or equality
             if (c.type === 'tab') {
                 return strictTabMatchFields(c.title || c.text || '', c.url || '', query) > 0;
             }
             // Other types keep previous fuzzy gating
-            return fuzzyStringSim(c.text || c.title || "", query) > 0.3 || c.type === "ai" || c.type === "calculator";
+            return fuzzyStringSim(c.text || c.title || "", query) > 0.2 || c.type === "ai" || c.type === "calculator";
         });
 
         prelim.forEach(c => { c.score = scoreCandidate(c, query); });
