@@ -1,4 +1,3 @@
-Heres my version fix it up a tad:
 # MoonCow: a fast, messy, lovable search bar for Firefox (alpha)
 
 MoonCow is my take on the Zen and Arc command palette, but actually useful. It’s a Firefox extension (works great in Zen, which I daily drive) that gives you a beautiful search bar with smart ranking, shortcuts, and in-panel widgets that make your browser feel like it leveled up. I have a very clear philosphy with it: Minimize total actions required to get to the goal. That is what literally every commit, change, and update that I put out has been to try and get closer to that goal
