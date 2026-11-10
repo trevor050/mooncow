@@ -66,7 +66,7 @@ Start with `>` to see only commands, `@` to pick a site to search, `?` for every
 | **Recently closed** tabs, restored with their history | `closed`, `reopen hacker news` |
 | **Frequent sites** (autofill), **past searches**, **bookmarks**, **history** | `gith`, `ramen` |
 | **Tab and window commands** | `close duplicates`, `close other tabs`, `reopen closed tab`, `pin tab`, `mute tab`, `move tab to new window`, `copy url`, `screenshot` |
-| **Site search** | `@yt lofi`, `@gh wxt`, `useEffect mdn` |
+| **Site search** | `@yt lofi`, `@gh wxt`, `useEffect mdn`, `site react hooks` (the site you're on) |
 | **Calculator** and **equation solver** | `2^10 / 3`, `15% of 80`, `tip 18% 64.20 for 3`, `5x + 3 = 8` |
 | **Units** and **currency** (ECB rates) | `10 km to mi`, `72 f in c`, `3 cups to ml`, `25 usd to eur` |
 | **Color** | `#ff8800`, `rgb(30 144 255)`, `color picker` |

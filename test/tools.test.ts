@@ -218,6 +218,13 @@ describe('web and site search', () => {
     const on = await run(web, 'ramen', ctx({ data, settings: { ...ctx().settings, suggestions: true } }));
     expect(on.map((r) => r.kind)).toEqual(['search', 'suggestion']);
   });
+  it('searches the current site', async () => {
+    const [r] = await run(web, 'site react hooks');
+    expect(r).toMatchObject({ title: 'react hooks', subtitle: 'Search this site', relevance: RELEVANCE.explicit });
+    let opened = '';
+    await r.actions[0].run({ browser: { pageInfo: async () => ({ url: 'https://react.dev/learn', title: '' }) }, open: async (u: string) => { opened = u; }, toast() {} } as never);
+    expect(opened).toBe('https://www.google.com/search?q=site%3Areact.dev%20react%20hooks');
+  });
   it('searches sites by @alias and trailing name', async () => {
     expect((await first(appSearch, '@yt lofi')).actions[0].title).toBe('Search YouTube');
     expect((await first(appSearch, 'lofi youtube')).subtitle).toBe('Search YouTube');

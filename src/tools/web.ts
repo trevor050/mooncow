@@ -46,10 +46,35 @@ export default defineTool({
   id: 'web',
   name: 'Web',
   description: 'Open typed addresses, search Google, and show search suggestions.',
-  examples: ['github.com/trevor050', 'localhost:5173', 'best ramen in boston'],
+  examples: ['github.com/trevor050', 'localhost:5173', 'site react hooks', 'best ramen in boston'],
   async match(q, ctx) {
     if (q.isEmpty || q.text.startsWith('>')) return null;
     const results: Result[] = [];
+
+    // "site react hooks" / "search this site for react hooks": Google, limited to the current site.
+    const onSite = q.commandWithArg('site', 'search this site for', 'search this site', 'on this site');
+    if (onSite) {
+      results.push({
+        id: 'site',
+        kind: 'command',
+        title: onSite,
+        subtitle: 'Search this site',
+        icon: { glyph: 'search' },
+        relevance: RELEVANCE.explicit,
+        actions: [
+          {
+            title: 'Search this site',
+            async run(ctx) {
+              const page = await ctx.browser.pageInfo();
+              let host = '';
+              try { host = page ? new URL(page.url).hostname : ''; } catch {}
+              if (!host) return ctx.toast('This page has no site to search');
+              await ctx.open(`https://www.google.com/search?q=${encodeURIComponent(`site:${host} ${onSite}`)}`);
+            },
+          },
+        ],
+      });
+    }
     const url = toUrl(q.text);
     if (url) {
       results.push({
