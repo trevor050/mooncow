@@ -1,3 +1,5 @@
+import { describeEnvironment, getActiveTab, getPageText } from './page-context.js';
+
 // Google AI implementation for Mooncow
 // Get your free API key from: https://aistudio.google.com/app/apikey
 
@@ -198,15 +200,12 @@ async function* streamGoogleCompletion(messages, options = {}) {
     }
 }
 
-// expose globally
-if (typeof window !== 'undefined') {
-    window.streamGoogleCompletion = streamGoogleCompletion;
-}
 
 /**
  * Convert our internal message format to Google's format
  */
 async function convertMessagesToGoogleFormat(messages, options = {}) {
+    const env = describeEnvironment();
     const converted = [];
     let screenshot = null;
     let pageSummary = null;
@@ -218,11 +217,11 @@ async function convertMessagesToGoogleFormat(messages, options = {}) {
 
 ## Current Browser Context
 - **Current Time**: ${new Date().toLocaleString()}
-- **Timezone**: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
-- **Browser**: ${navigator.userAgent}
-- **Language**: ${navigator.language || navigator.languages?.[0] || 'en-US'}
-- **Platform**: ${navigator.platform}
-- **Screen**: ${screen.width}x${screen.height} (${screen.colorDepth}-bit, ${window.devicePixelRatio || 1}x pixel ratio)
+- **Timezone**: ${env.timeZone}
+- **Browser**: ${env.userAgent}
+- **Language**: ${env.language}
+- **Platform**: ${env.platform}
+- **Screen**: ${env.screen} (${env.colorDepth}-bit, ${env.pixelRatio}x pixel ratio)
 
 ## Your Capabilities
 
@@ -371,29 +370,15 @@ async function captureVisibleTab() {
  */
 async function capturePageSummary() {
     try {
-        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-        if (tabs.length === 0) throw new Error('No active tab');
- 
-        // Inject script to capture page title, URL, and visible text (truncated)
-        const result = await browser.tabs.executeScript(tabs[0].id, {
-             code: `
-                 ({
-                    title: document.title,
-                    url: window.location.href,
-                    text: (document.body.innerText || '').slice(0, 8000)
-                 });
-              `
-          });
- 
-        if (result && result[0]) {
-            const { title, url, text } = result[0];
-            const summary = `PAGE_URL: ${url}\nTITLE: ${title}\nCONTENT_SNIPPET:\n${text}`;
-            return summary;
-        }
-         
-        return null;
+        const tab = await getActiveTab();
+        if (!tab) return null;
+        const text = await getPageText(tab.id);
+        if (!text) return null;
+        return `PAGE_URL: ${tab.url || ''}\nTITLE: ${tab.title || ''}\nCONTENT_SNIPPET:\n${text}`;
     } catch (err) {
         console.error('[GoogleChat] Page summary capture failed:', err);
         return null;
     }
-} 
+}
+
+export { getGoogleCompletion, streamGoogleCompletion };

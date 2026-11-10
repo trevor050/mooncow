@@ -1,5 +1,5 @@
 // Registry to expose tools in OpenAI/Cerebras function-calling format.
-// Loaded in the background context before chat.js. Supports late registrations.
+// Imported by background/index.js after the tool modules. Supports late registrations.
 
 // Initialize registries if not present
 if (!Array.isArray(self.toolRegistry)) self.toolRegistry = [];
@@ -17,24 +17,6 @@ function ensureKnownToolsRegistered() {
     if (self.JinaTool && !have.has('jina')) toMaybeRegister.push(self.JinaTool);
     if (self.JinaSummarizerTool && !have.has('jina_page_summaries')) toMaybeRegister.push(self.JinaSummarizerTool);
 
-    // As a last-resort in worker contexts, attempt to lazy-load scripts
-    // Guard importScripts for service-worker/workers only
-    if (typeof importScripts === 'function') {
-      try {
-        if (!self.MultiSourceSearchTool && !have.has('multi_source_search')) {
-          importScripts('tools/search.js');
-          if (self.MultiSourceSearchTool) toMaybeRegister.push(self.MultiSourceSearchTool);
-        }
-      } catch (_) { /* ignore */ }
-      try {
-        if (!self.JinaTool && !have.has('jina')) {
-          // Try both tool folder and root fallback, depending on manifest wiring
-          try { importScripts('tools/jina.js'); } catch (_) {}
-          try { if (!self.JinaTool) importScripts('jina.js'); } catch (_) {}
-          if (self.JinaTool) toMaybeRegister.push(self.JinaTool);
-        }
-      } catch (_) { /* ignore */ }
-    }
 
     toMaybeRegister.filter(Boolean).forEach(t => {
       try { if (typeof self.registerTool === 'function') self.registerTool(t); } catch (_) {}

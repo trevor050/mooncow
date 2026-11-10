@@ -1,3 +1,5 @@
+import { describeEnvironment, getPageText } from './page-context.js';
+
 // API key handling: prefer extension storage; fall back to hardcoded (dev only)
 console.log('[CerebrasChat] chat.js loaded');
 // You can get a free key from: https://www.cerebras.ai/get-api-key/
@@ -583,15 +585,6 @@ async function executeToolWithFallback(toolName, argsInput) {
 
         // Attempt late registration of known globals (and lazy-load if possible)
         try {
-            // Try to lazy-load tool scripts in worker contexts
-            if (typeof importScripts === 'function') {
-                try {
-                    if (toolName === 'multi_source_search' && !self.MultiSourceSearchTool) importScripts('tools/search.js');
-                } catch (_) {}
-                try {
-                    if (toolName === 'jina' && !self.JinaTool) importScripts('tools/jina.js');
-                } catch (_) {}
-            }
             const t = (toolName === 'multi_source_search') ? self.MultiSourceSearchTool
                 : (toolName === 'jina') ? self.JinaTool
                 : (toolName === 'jina_page_summaries') ? self.JinaSummarizerTool
@@ -633,37 +626,10 @@ async function getCerebrasCompletion(messages, options = {}) {
     // Add system prompt if not already present
     if (!messages.some(msg => msg.role === 'system')) {
         const currentTime = new Date().toLocaleString();
-        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const userAgent = navigator.userAgent;
-        const language = navigator.language || navigator.languages?.[0] || 'en-US';
-        const platform = navigator.platform;
-        const screenInfo = `${screen.width}x${screen.height}`;
-        const colorDepth = screen.colorDepth;
-        const pixelRatio = window.devicePixelRatio || 1;
+        const { timeZone, userAgent, language, platform, screen: screenInfo, colorDepth, pixelRatio } = describeEnvironment();
         
         // Fetch page content for context (this will only work in background script with tab permissions)
-        let pageContext = '';
-        try {
-            // Try to get the active tab's content
-            const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-            if (tabs.length > 0) {
-                const results = await browser.scripting.executeScript({
-                    target: { tabId: tabs[0].id },
-                    function: () => {
-                        // Extract text content from the page
-                        const body = document.body;
-                        if (!body) return '';
-                        
-                        const text = body.innerText || body.textContent || '';
-                        return text.trim().substring(0, 8000); // Limit to ~8k characters
-                    }
-                });
-                pageContext = results?.[0]?.result || '';
-            }
-        } catch (error) {
-            console.log('Could not fetch page content:', error);
-            // Continue without page context
-        }
+        const pageContext = await getPageText();
         
         let externalContext = '';
         try {
@@ -912,30 +878,9 @@ async function* streamCerebrasCompletion(messages, options = {}) {
     // Add system prompt if not already present (mirror non-stream path)
     if (!messages.some(msg => msg.role === 'system')) {
         const currentTime = new Date().toLocaleString();
-        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const userAgent = navigator.userAgent;
-        const language = navigator.language || navigator.languages?.[0] || 'en-US';
-        const platform = navigator.platform;
-        const screenInfo = `${screen.width}x${screen.height}`;
-        const colorDepth = screen.colorDepth;
-        const pixelRatio = window.devicePixelRatio || 1;
+        const { timeZone, userAgent, language, platform, screen: screenInfo, colorDepth, pixelRatio } = describeEnvironment();
 
-        let pageContext = '';
-        try {
-            const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-            if (tabs.length > 0) {
-                const results = await browser.scripting.executeScript({
-                    target: { tabId: tabs[0].id },
-                    function: () => {
-                        const body = document.body;
-                        if (!body) return '';
-                        const text = body.innerText || body.textContent || '';
-                        return text.trim().substring(0, 8000);
-                    }
-                });
-                pageContext = results?.[0]?.result || '';
-            }
-        } catch (_) {}
+        const pageContext = await getPageText();
 
         let externalContext = '';
         try {
@@ -1227,9 +1172,7 @@ async function* streamCerebrasCompletion(messages, options = {}) {
     }
 }
 
-if (typeof window !== 'undefined') {
-    window.streamCerebrasCompletion = streamCerebrasCompletion;
-} 
+
 
 // Attempt to parse a textual tool call. Supports:
 // 1) <tool>{"name":"...","arguments":{...}}</tool>
@@ -1626,3 +1569,5 @@ function buildToolResultBlob(toolName, result, args) {
         return `tool ${toolName} result format error: ${e && e.message ? e.message : String(e)}`;
     }
 }
+
+export { getCerebrasCompletion, streamCerebrasCompletion };

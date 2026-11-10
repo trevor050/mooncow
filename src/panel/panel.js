@@ -5569,22 +5569,18 @@ async function enrichSuggestion(suggestion) {
 // Streaming token handling
 const streamHandlers = new Map();
 
-browser.runtime.onMessage.addListener((msg) => {
-    if (msg.streamId && msg.debug) {
-        try { console.log('[Mooncow][stream]', msg.debug); } catch (_) {}
-    }
-    if (msg.streamId && (msg.token || msg.done || msg.error)) {
+function dispatchStreamMessage(msg) {
+    if (msg && msg.streamId && (msg.token || msg.done || msg.error)) {
         const handler = streamHandlers.get(msg.streamId);
-        if (handler) {
-            handler(msg);
-        }
+        if (handler) handler(msg);
     }
-});
+}
 
 function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
     const streamId = Math.random().toString(36).slice(2);
     const apiAction = aiProvider === 'google' ? 'streamGoogleCompletion' : 'streamCerebrasCompletion';
     const apiOptions = aiProvider === 'google' ? { includeScreenshot: true, includePdf: true } : {};
+    const port = browser.runtime.connect({ name: 'ai-stream' });
 
     let fullText = '';
     let thoughtText = '';
@@ -6046,6 +6042,7 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
         // Cancel by removing the handler so incoming tokens are ignored and finalize quickly
         window.__currentStreamCancel = () => {
             try { streamHandlers.delete(streamId); } catch (_) {}
+            try { port.disconnect(); } catch (_) {}
             // Hide the stop button if visible
             try { if (stopButtonEl) stopButtonEl.style.display = 'none'; } catch (_) {}
         };
@@ -6053,7 +6050,16 @@ function startStreaming(aiProvider, conversation, thinkingEl, carry = null) {
         if (stopButtonEl) stopButtonEl.style.display = 'inline-flex';
     } catch (_) {}
 
-    runtimeSendMessage({ action: apiAction, messages: conversation, options: apiOptions, streamId });
+    port.onMessage.addListener((msg) => {
+        dispatchStreamMessage(msg);
+        if (msg && (msg.done || msg.error)) {
+            try { port.disconnect(); } catch (_) {}
+        }
+    });
+    port.onDisconnect.addListener(() => {
+        if (streamHandlers.has(streamId)) dispatchStreamMessage({ streamId, error: 'Connection to the background closed.' });
+    });
+    port.postMessage({ action: apiAction, messages: conversation, options: apiOptions, streamId });
 }
 
 // Patch appendMessage for thinking dropdown

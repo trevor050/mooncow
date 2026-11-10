@@ -1,3 +1,6 @@
+import { getCerebrasCompletion } from './cerebras-chat.js';
+import { getGoogleCompletion } from './google-chat.js';
+
 async function getSuggestions(query) {
   if (!query) return [];
   const url = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent(query)}`;
@@ -286,74 +289,10 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true; // Indicates that the response is sent asynchronously
     }
 
-    // Streaming handlers
-    if (message.action === 'streamGoogleCompletion') {
-        const tabId = sender.tab.id;
-        (async () => {
-            try {
-                const gen = streamGoogleCompletion(message.messages, message.options || {});
-                for await (const token of gen) {
-                    browser.tabs.sendMessage(tabId, { streamId: message.streamId, token });
-                }
-                browser.tabs.sendMessage(tabId, { streamId: message.streamId, done: true });
-            } catch (err) {
-                browser.tabs.sendMessage(tabId, { streamId: message.streamId, error: err.message || 'stream error' });
-            }
-        })();
-        sendResponse({ status: 'streaming' });
-        return true;
-    }
-
-    if (message.action === 'streamCerebrasCompletion') {
-        const tabId = sender && sender.tab && sender.tab.id;
-        console.log('[Mooncow] streamCerebrasCompletion request received:', {
-            hasMessages: Array.isArray(message.messages),
-            msgCount: Array.isArray(message.messages) ? message.messages.length : 0,
-            options: message.options || {},
-            streamId: message.streamId
-        });
-        // Broadcast a debug start line to either the tab or extension page
-        const debugStart = { streamId: message.streamId, debug: 'streamCerebrasCompletion started' };
-        if (typeof tabId === 'number') browser.tabs.sendMessage(tabId, debugStart); else browser.runtime.sendMessage(debugStart);
-        (async () => {
-            try {
-                const gen = streamCerebrasCompletion(message.messages, message.options || {});
-                for await (const token of gen) {
-                    if (typeof tabId === 'number') {
-                        browser.tabs.sendMessage(tabId, { streamId: message.streamId, token });
-                    } else {
-                        // Fallback to runtime broadcast for extension pages (e.g., search.html)
-                        browser.runtime.sendMessage({ streamId: message.streamId, token });
-                    }
-                }
-                if (typeof tabId === 'number') {
-                    browser.tabs.sendMessage(tabId, { streamId: message.streamId, done: true });
-                } else {
-                    browser.runtime.sendMessage({ streamId: message.streamId, done: true });
-                }
-                console.log('[Mooncow] streamCerebrasCompletion done for streamId:', message.streamId);
-                const debugDone = { streamId: message.streamId, debug: 'streamCerebrasCompletion done' };
-                if (typeof tabId === 'number') browser.tabs.sendMessage(tabId, debugDone); else browser.runtime.sendMessage(debugDone);
-            } catch (err) {
-                if (typeof tabId === 'number') {
-                    browser.tabs.sendMessage(tabId, { streamId: message.streamId, error: err.message || 'stream error' });
-                } else {
-                    browser.runtime.sendMessage({ streamId: message.streamId, error: err.message || 'stream error' });
-                }
-                console.error('[Mooncow] streamCerebrasCompletion error for streamId:', message.streamId, err);
-                const debugErr = { streamId: message.streamId, debug: `streamCerebrasCompletion error: ${err && err.message ? err.message : String(err)}` };
-                if (typeof tabId === 'number') browser.tabs.sendMessage(tabId, debugErr); else browser.runtime.sendMessage(debugErr);
-            }
-        })();
-        sendResponse({ status: 'streaming' });
-        return true;
-    }
-
     // --------------------------------------------------
     // Grab page text from the active tab to feed into AI
     // --------------------------------------------------
     if (message.action === 'getPageText') {
-console.log('[Mooncow] background.js loaded');
         // Prefer the tab the message came from (iframe inside the tab)
         const tabId = sender.tab && sender.tab.id;
 
