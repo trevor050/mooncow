@@ -77,7 +77,26 @@ void (async () => {
 
   const suggestions = h('input', { type: 'checkbox', id: 'suggestions' });
   suggestions.checked = settings.suggestions;
-  suggestions.addEventListener('change', () => void save({ suggestions: suggestions.checked }));
+  suggestions.addEventListener('change', () => {
+    if (!suggestions.checked) {
+      void save({ suggestions: false });
+      return;
+    }
+    // Ask for exactly one origin; in Firefox, also the "search terms" data consent.
+    const request = { origins: ['https://suggestqueries.google.com/*'], ...(isFirefox ? { data_collection: ['searchTerms'] } : {}) };
+    browser.permissions
+      .request(request as Parameters<typeof browser.permissions.request>[0])
+      .then(async (granted) => {
+        suggestions.checked = granted;
+        await save({ suggestions: granted });
+        say(granted ? 'Suggestions on.' : 'Suggestions stay off: the permission was not granted.', !granted);
+      })
+      .catch(async (err: Error) => {
+        suggestions.checked = false;
+        await save({ suggestions: false });
+        say(`Could not turn on suggestions: ${err.message}`, true);
+      });
+  });
 
   const newtab = h('input', { type: 'checkbox', id: 'newtab' });
   newtab.checked = settings.newTabPage;

@@ -9,6 +9,8 @@ export default defineConfig({
   srcDir: 'src',
   outDir: '.output',
   manifestVersion: 3,
+  // The Firefox sources zip is for AMO reviewers: code and build config only.
+  zip: { excludeSources: ['docs/**', '.github/**', '.shots/**', 'test-results/**', 'playwright-report/**'] },
   manifest: ({ browser }) => ({
     name: 'MoonCow',
     description: 'The command bar as the way you use your browser: tabs, history, commands and instant answers, all from one keystroke.',

@@ -133,3 +133,11 @@ test('AI chat streams from an OpenAI-compatible endpoint', async ({ context, ser
   await expect(frame.locator('.query')).toBeVisible();
   await paletteFrame(page);
 });
+
+test('turning the new tab page off hands new tabs back to Chrome', async ({ context, extensionId }) => {
+  const [worker] = context.serviceWorkers();
+  await worker.evaluate(() => chrome.storage.local.set({ settings: { theme: 'system', suggestions: false, newTabPage: false, ai: { baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-6-luna', reasoningEffort: '' } } }));
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/newtab.html`).catch(() => {});
+  await expect.poll(() => worker.evaluate(async () => (await chrome.tabs.query({})).map((t) => t.url || t.pendingUrl).join(' '))).toContain('chrome://new-tab-page');
+});

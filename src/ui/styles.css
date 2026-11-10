@@ -185,6 +185,7 @@ html.surface-window .panel {
 html.surface-newtab #app {
   display: flex;
   justify-content: center;
+  align-items: flex-start;
   padding: 18vh 24px 24px;
   min-height: 100vh;
 }

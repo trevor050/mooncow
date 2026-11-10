@@ -206,7 +206,16 @@ export const ops = {
         await browser.tabs.create({ url: `view-source:${tab.url}`, index: tab.index + 1 });
         return;
       case 'screenshot':
-        return await browser.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+        try {
+          return await browser.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+        } catch (err) {
+          // Browsers only allow page capture right after you use the extension's
+          // own shortcut or toolbar button (activeTab).
+          if (/activeTab|all_urls|permission/i.test(String((err as Error)?.message))) {
+            throw new Error('Open MoonCow with its toolbar button or browser shortcut, then try again');
+          }
+          throw err;
+        }
     }
     throw new Error(`Unsupported action ${action}`);
   },

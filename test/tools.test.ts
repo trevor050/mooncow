@@ -304,6 +304,7 @@ describe('AI and palette commands', () => {
   it('offers the help list, settings and themes', async () => {
     expect((await first(palette, '?')).title).toBe('What MoonCow can do');
     expect((await first(palette, 'settings')).title).toBe('MoonCow settings');
+    expect(await run(palette, 'moon')).toEqual([]);
     expect((await first(palette, 'dark mode')).title).toBe('Use dark theme');
     expect((await first(palette, 'qr hello')).title).toContain('hello');
   });

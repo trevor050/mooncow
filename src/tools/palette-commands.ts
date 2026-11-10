@@ -32,7 +32,7 @@ export default defineTool({
     }
     const settingsRelevance = q.is('settings', 'preferences', 'options', 'mooncow settings', 'api key')
       ? RELEVANCE.explicit
-      : q.prefixOf(['settings', 'preferences', 'mooncow settings'], 4) ? RELEVANCE.partial + 0.15 : 0;
+      : q.prefixOf(['settings', 'preferences'], 4) ? RELEVANCE.partial + 0.15 : 0;
     if (settingsRelevance) {
       results.push({
         id: 'settings',
