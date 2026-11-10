@@ -2,25 +2,28 @@
   "name": "mooncow",
   "version": "0.2.0",
   "private": true,
-  "description": "A keyboard-first command palette for Firefox and Zen: smart ranking, quick answers, and a tool-using AI chat that runs on free tiers.",
+  "description": "A keyboard-first command palette for Firefox, Zen and Chrome, built from plugins: instant answers, smart ranking, and an AI chat that runs on your own OpenAI-compatible key.",
   "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=20.19"
   },
   "scripts": {
-    "start": "web-ext run --source-dir . --firefox-profile-create-if-missing",
-    "lint": "eslint . && web-ext lint --source-dir . --self-hosted",
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build && wxt build -b firefox",
+    "build:chrome": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip && wxt zip -b firefox",
+    "typecheck": "tsc --noEmit",
+    "lint": "npm run typecheck && web-ext lint --source-dir .output/firefox-mv3 --self-hosted",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
-    "build": "web-ext build --source-dir . --overwrite-dest",
-    "check": "npm run lint && npm test && npm run test:e2e"
+    "test:e2e": "playwright test && node e2e/firefox-smoke.mjs",
+    "postinstall": "wxt prepare"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",
-    "eslint": "^10.14.0",
-    "globals": "^17.14.0",
     "jsdom": "^31.0.0",
     "puppeteer-core": "^25.17.0",
     "typescript": "^7.0.2",
@@ -29,6 +32,7 @@
     "wxt": "^0.21.5"
   },
   "dependencies": {
-    "nerdamer": "^2.0.1"
+    "nerdamer": "^2.0.1",
+    "qrcode-generator": "^2.0.4"
   }
 }
