@@ -280,6 +280,9 @@ describe('browser objects', () => {
     expect((await first(browserCommands, 'reload')).relevance).toBe(RELEVANCE.explicit);
     expect((await first(browserCommands, 'rel'))?.relevance ?? 0).toBeLessThan(RELEVANCE.fallback);
     expect((await first(browserCommands, 'close dup')).title).toBe('Close duplicate tabs');
+    expect((await first(browserCommands, 'close dupl')).relevance).toBeGreaterThan(RELEVANCE.fallback);
+    expect((await first(browserCommands, 'clo')).relevance).toBeLessThan(RELEVANCE.fallback); // never close a tab on a stub
+    expect((await first(browserCommands, 'reloa')).relevance).toBeGreaterThan(RELEVANCE.fallback);
     expect((await run(browserCommands, '>')).length).toBeGreaterThan(20);
     expect((await run(browserCommands, '> pin')).map((r) => r.title)).toEqual(['Pin tab']);
     expect((await run(browserCommands, '> close')).map((r) => r.title)).toEqual(['Close tab', 'Close other tabs', 'Close tabs to the right', 'Close duplicate tabs', 'Reopen closed tab']);
@@ -293,6 +296,10 @@ describe('AI and palette commands', () => {
     expect(looksLikeQuestion('ramen')).toBe(false);
     expect((await first(ai, 'ai explain monads')).relevance).toBe(RELEVANCE.explicit);
     expect((await first(ai, 'ramen')).relevance).toBeLessThan(RELEVANCE.fallback);
+    // Without a model configured, questions do not push web search down.
+    expect((await first(ai, 'why is the sky blue?')).relevance).toBeLessThan(RELEVANCE.fallback);
+    const configured = ctx({ settings: { ...ctx().settings, ai: { ...ctx().settings.ai, apiKey: 'k' } } });
+    expect((await run(ai, 'why is the sky blue?', configured))[0].relevance).toBeGreaterThan(RELEVANCE.fallback);
   });
   it('offers the help list, settings and themes', async () => {
     expect((await first(palette, '?')).title).toBe('What MoonCow can do');

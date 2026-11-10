@@ -41,3 +41,8 @@ export function originPattern(baseUrl: string): string | null {
     return null;
   }
 }
+
+/** True when the AI tool has enough to make a request: hosted APIs need a key, local servers usually do not. */
+export function aiConfigured(ai: Settings['ai']): boolean {
+  return !!ai.baseUrl && !!ai.model && (!!ai.apiKey || !/api\.openai\.com|openrouter\.ai/.test(ai.baseUrl));
+}

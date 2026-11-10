@@ -1,5 +1,6 @@
 import { defineTool } from '@/core/registry';
 import { RELEVANCE, type Action, type Result } from '@/core/types';
+import { aiConfigured } from '@/lib/settings';
 import { chatView } from '@/ui/views/chat-view';
 
 // The AI tool is a plugin like any other: it offers an "Ask AI" result and,
@@ -60,7 +61,9 @@ export default defineTool({
     if (q.is('summarize this page', 'summarise this page', 'tldr', 'tl;dr', 'explain this page', 'summarize page')) {
       return askResult('summarize', 'Summarize this page', 'Ask AI about the current page', 'Summarize this page in a few bullet points.', RELEVANCE.explicit, true);
     }
-    const question = looksLikeQuestion(q.text);
-    return askResult('ask', q.text, 'Ask AI', q.text, question ? RELEVANCE.strong + 0.02 : RELEVANCE.partial);
+    // Natural questions go to the model first, once one is set up. Until then
+    // web search keeps the top spot and "Ask AI" leads to setup.
+    const question = looksLikeQuestion(q.text) && aiConfigured(ctx.settings.ai);
+    return askResult('ask', q.text, aiConfigured(ctx.settings.ai) ? 'Ask AI' : 'Ask AI (set up a model first)', q.text, question ? RELEVANCE.strong + 0.02 : RELEVANCE.partial);
   },
 });

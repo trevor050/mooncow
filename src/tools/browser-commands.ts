@@ -34,16 +34,24 @@ const COMMANDS: Command[] = [
   { action: 'copy-title', title: 'Copy page title', phrases: ['copy title', 'copy page title'], glyph: 'text' },
 ];
 
+const DESTRUCTIVE = new Set<Command['action']>(['close', 'close-others', 'close-right', 'close-duplicates']);
+
 /**
- * Exact phrase: explicit. Prefix of a phrase: relevance grows with how much
- * of the phrase has been typed, so "rel" stays below web search while
- * "reloa" moves above it.
+ * Exact phrase: explicit. Otherwise the whole query must start a command
+ * phrase, and relevance grows with how much of the shortest such phrase has
+ * been typed, plus a bonus for typing more than one word. Single-word stubs
+ * of commands that close tabs ("clo") stay below web search, so a stray Enter
+ * never closes anything.
  */
-export function commandRelevance(query: { lower: string; is(...p: string[]): boolean; prefixOf(p: string[], min?: number): boolean }, phrases: string[]): number {
+export function commandRelevance(query: { lower: string; is(...p: string[]): boolean; prefixOf(p: string[], min?: number): boolean }, phrases: string[], destructive = false): number {
   if (query.is(...phrases)) return RELEVANCE.explicit;
   if (!query.prefixOf(phrases, 3)) return 0;
-  const longest = Math.max(...phrases.filter((p) => p.startsWith(query.lower)).map((p) => p.length));
-  return RELEVANCE.partial + 0.3 * (query.lower.length / longest);
+  const shortest = Math.min(...phrases.filter((p) => p.startsWith(query.lower)).map((p) => p.length));
+  const coverage = query.lower.length / shortest;
+  const multiword = query.lower.includes(' ');
+  const r = RELEVANCE.partial + 0.3 * coverage + (multiword ? 0.08 : 0);
+  if (destructive && !multiword && coverage < 0.8) return Math.min(r, RELEVANCE.fallback - 0.05);
+  return Math.min(r, RELEVANCE.parsed - 0.01);
 }
 
 function toResult(cmd: Command, relevance: number): Result {
@@ -96,7 +104,7 @@ export default defineTool({
         return hit ? toResult(c, RELEVANCE.explicit - i * 0.001) : null;
       }).filter((r): r is Result => r !== null);
     }
-    return COMMANDS.map((c) => ({ c, r: commandRelevance(q, c.phrases) }))
+    return COMMANDS.map((c) => ({ c, r: commandRelevance(q, c.phrases, DESTRUCTIVE.has(c.action)) }))
       .filter((x) => x.r > 0)
       .map((x) => toResult(x.c, x.r));
   },

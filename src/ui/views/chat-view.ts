@@ -2,7 +2,7 @@ import type { View, ViewContext } from '@/core/types';
 import { AI_PORT, CHAT_KEY, type AiEvent, type AiRequest, type SavedChat } from '@/lib/messages';
 import { renderMarkdown } from '@/lib/markdown';
 import type { ChatMessage } from '@/lib/openai';
-import { loadSettings, originPattern, saveSettings } from '@/lib/settings';
+import { aiConfigured, loadSettings, originPattern, saveSettings } from '@/lib/settings';
 import { clear, h, isMod } from '../dom';
 import { glyph } from '../icons';
 
@@ -247,8 +247,7 @@ export function chatView(options: ChatOptions = {}): View {
         modelLabel.textContent = settings.ai.model;
         // Hosted APIs need a key; local servers usually do not. Host permission
         // is requested when settings are saved; endpoints that allow CORS work without it.
-        const ready = !!settings.ai.baseUrl && !!settings.ai.model &&
-          (!!settings.ai.apiKey || !/api\.openai\.com|openrouter\.ai/.test(settings.ai.baseUrl));
+        const ready = aiConfigured(settings.ai);
         if (!ready) {
           renderSetup(ctx, () => { composer.hidden = false; void start(); });
           return;

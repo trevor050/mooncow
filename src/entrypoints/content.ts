@@ -68,8 +68,15 @@ export default defineContentScript({
       if (!host) return;
       host.style.setProperty('display', 'none', 'important');
       open = false;
-      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
-      else window.focus();
+      // Pull keyboard focus out of the hidden frame, or the next key press
+      // (including the shortcut) would land in an invisible input.
+      frame?.blur();
+      const back = previousFocus instanceof HTMLElement && previousFocus.isConnected && previousFocus !== document.body ? previousFocus : null;
+      if (back) back.focus({ preventScroll: true });
+      else {
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        window.focus();
+      }
     }
 
     function toggle() {
