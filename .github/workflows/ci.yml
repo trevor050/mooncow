@@ -34,6 +34,7 @@ jobs:
           name: mooncow-chrome
           path: .output/*-chrome.zip
           if-no-files-found: error
+          include-hidden-files: true  # WXT writes to .output/
       - uses: actions/upload-artifact@v7
         with:
           name: mooncow-firefox
@@ -41,6 +42,7 @@ jobs:
             .output/*-firefox.zip
             .output/*-sources.zip
           if-no-files-found: error
+          include-hidden-files: true
 
   chromium-e2e:
     name: End-to-end (Chromium, real extension)
