@@ -19,7 +19,10 @@
     "lint": "npm run typecheck && web-ext lint --source-dir .output/firefox-mv3 --self-hosted",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test && node e2e/firefox-smoke.mjs",
+    "test:e2e": "playwright test",
+    "test:firefox": "node e2e/firefox-smoke.mjs",
+    "screenshots": "node scripts/screenshots.mjs",
+    "icons": "node scripts/render-icons.mjs",
     "postinstall": "wxt prepare"
   },
   "devDependencies": {
