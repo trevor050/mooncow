@@ -1,69 +1,202 @@
-# MoonCow: a fast, messy, lovable search bar for Firefox (alpha)
+# MoonCow
 
-MoonCow is my take on the Zen and Arc command palette, but actually useful. It’s a Firefox extension (works great in Zen, which I daily drive) that gives you a beautiful search bar with smart ranking, shortcuts, and in-panel widgets that make your browser feel like it leveled up. I have a very clear philosphy with it: Minimize total actions required to get to the goal. That is what literally every commit, change, and update that I put out has been to try and get closer to that goal
+A command bar for Firefox, Zen and Chrome that tries to be the main way you use your browser. One shortcut, then type: it finds your open tabs, the tab you just closed, the site you always go to, your bookmarks and history, runs tab commands, and answers the small stuff (math, units, colors, hashes, dates, definitions) right there, so you never open a tab to visit some ad-covered converter site again.
 
-It’s very alpha. It works. It’s buggy. You’ll find stuff. Please file issues and PRs. I’m squashing bugs when I can, but I’d rather ship than let it rot on my machine for another month.
+![MoonCow in use: switching tabs, converting units, a color, a hash, time zones, date math and tab commands](docs/screenshots/demo.gif)
 
-## Why this exists
-- **Lightweight command bar:** quick open, fuzzy search, and smart defaults. It tries to guess what you want before you hit enter.
-- **In-panel widgets:** everything lives inside the panel (color picker, AI chat, readers, little helpers). The panel expands to fit, and you can keep searching while a widget is open. It feels smooth.
-- **Free but good AI:** built-in AI chat with tool use and web search. Uses providers with generous free tiers (Cerebras, Google Gemini, Jina, and more). You can chat for hours before hitting limits, and you can swap providers if you do. No sketchy paywalls.
-- **Agentic tools:** the AI can search, read pages, and use tools. It works without a Google key, and it gets better if you add one. Cerebras does not handle images yet, so screenshot workflows stick to providers that support them.
+## The idea
 
-## Status (read this)
-- Alpha. There are bugs. I use it daily anyway.
-- Around 15k LOC with a lot of moving parts, but it runs smoothly on my base M1 Air.
-- If you’ve got a 2013 toaster with 50 tabs, this may not be ideal. On modern setups it’s chill. I think I should be able to optimize it further but I have not much experience with this I'll admit
+What if everything was Spotlight? Arc got closest to this and Arc is going away. No browser goes far enough with the bar, so MoonCow is my attempt. It has two halves, and both matter:
 
-## Features (highlights)
-- **Smart ranking:** predicts intent before you press enter. Not perfect, getting better.
-- **Zen and Arc vibes:** clean, dark, glassy UI. Looks good. Plays nice with your theme.
-- **In-panel widgets:** AI chat, color picker, readers, and more, all inline.
-- **Adaptive search:** app-specific shortcuts and context-aware actions.
-- **Tool-using AI:** web search and page reading via Jina Reader, Google, and others.
-- **Free-tier friendly:** I picked providers with generous limits, then hotswap accounts if you (somehow) hit limits.
+- **Get to the thing.** Open tabs come first, across every window, fuzzy on title and address. Then recently closed tabs, the sites you actually use, past searches, bookmarks and history. Then the web. Every row has verbs: switch, close, pin, mute, move it to a new window, copy the URL. The goal is that you mostly stop using the tab strip and the address bar.
+- **Answer it in place.** Why go to Google, or to some random junk site, for a color picker or a hash or "how many days until X"? If you need it often and you're fast on the keyboard, it should just be there. And it has to be *right*: a tool that misfires once teaches you to stop trusting the bar, so every tool only fires when it should and is tested on the inputs where it must stay quiet.
 
-## Keys and privacy
-- You add keys locally in the extension settings panel, stored with localstorage. Currently not encrypted, so I will make sure to do that in a PR.
-- Supported keys you can add (optional, but recommended):
-  - **Cerebras API key** for chat completions
-  - **Google Gemini API key** for models and better image input
-  - **Google Custom Search API + CSE CX** for Google Web (these ones, while annoying to grab make the search so much better)
-  - **Jina API key** for Reader and Search (I need to improve Jina, I will not lie. Its nice because its free, but it sucks because it loves to toss fetch errors. I have ideas on how to fix tho)
+Everything in the bar, built-in or not, is a plugin on the same small API. More on that below.
 
+| Open tabs and history first | Every row has verbs (⌘K) |
+| --- | --- |
+| ![Typing "moon" finds three open tabs before the web search](docs/screenshots/tabs-light.png) | ![The action menu on a tab: switch, close, pin, mute, duplicate, move](docs/screenshots/actions-dark.png) |
 
-## Install (Firefox and Zen)
-1. Clone the repo.
-2. In Firefox: `about:debugging` → This Firefox → Load Temporary Add-on → pick `manifest.firefox.json` (Though from testing I think you can click any file in the Mooncow folder).
-3. Open the command bar (keyboard shortcut or icon), go to Settings, and paste keys if you have them.
+| Colors, with tints and contrast | AI on your own key |
+| --- | --- |
+| ![Color picker view with HEX, RGB, HSL, a tint ramp and WCAG contrast](docs/screenshots/color-light.png) | ![AI chat answering in Markdown](docs/screenshots/chat-light.png) |
 
-Note: this is Firefox-first for now because Zen is my daily driver. Chromium support is on the table later.
+## Install it (from source, for now)
 
-## Dev quickstart
-- Code lives in a few chunky files:
-  - `search.js` for the core search bar, ranking, and UI glue
-  - `chat.js` for AI chat and tools orchestration
-  - `tools/` for Jina, Google, and Cerebras helpers
-  - `ranking.js` for ranking logic
-- Note: I need to refactor. I did way to tab complete and my code is a mess. Will do in a PR
-- Run as a temporary extension in Firefox while developing.
+It's not on the extension stores yet. You need Node 22.12 or newer.
 
+```sh
+git clone https://github.com/trevor050/mooncow.git
+cd mooncow
+npm install
+npm run build        # builds .output/chrome-mv3 and .output/firefox-mv3
+```
 
-## Roadmap (rough)
-- Stabilize ranking and edge cases
-- Broader provider support and image input parity
-- Better ranking/algos
-- Better settings UX
-- More widgets that are actually useful (notes, tiny calculators, etc.)
-- Minimizing resources (hard..)
-- Improving agency (Qwen is.. a model)
-- UI upgrade (I really want to do liquid glass, currently not possible on firefox. Or atleast I haven't seen a working implmentation of it. Maybe when I drop the chrome version..?)
+Every pull request also builds both packages in CI; grab `mooncow-chrome` or `mooncow-firefox` from the run's artifacts if you don't want to build.
 
-## Contributing
-- Open bugs with clear repro steps. Short repro videos help a ton.
-- PRs are welcome, especially for weird edge cases I haven’t hit yet. 
-- Be kind. This is a nights and weekends project that snowballed. I am going to work hard to make it useful. Its a daily driver for me and I hope you guys will end up feeling the same
-  
+**Firefox and Zen** (Firefox 140+; I daily drive Zen)
+1. Go to `about:debugging#/runtime/this-firefox`.
+2. Click **Load Temporary Add-on…** and pick `.output/firefox-mv3/manifest.json`.
+3. Temporary add-ons go away when the browser restarts. For a permanent install you need a signed build (see the roadmap).
+
+**Chrome and other Chromium browsers**
+1. Go to `chrome://extensions` and turn on **Developer mode**.
+2. Click **Load unpacked** and pick `.output/chrome-mv3`.
+
+Then press **Ctrl+E** (**⌘E** on a Mac).
+
+## Using it
+
+| Keys | |
+| --- | --- |
+| ↑ ↓ (or Ctrl+N / Ctrl+P) | move |
+| Enter | run the row's main action |
+| ⌘/Ctrl+Enter | run its second action (shown in the footer) |
+| ⌘/Ctrl+K | every action for the selected row |
+| Tab | complete a suggestion into the bar |
+| Esc | back out of a view, or close |
+
+Start with `>` to see only commands, `@` to pick a site to search, `?` for everything MoonCow can do (that list is generated from the installed tools, with examples you can click).
+
+### What's in the box
+
+| | Try |
+| --- | --- |
+| **Open tabs**, every window, fuzzy | `gmail`, `pr review`, `gml` |
+| **Recently closed** tabs, restored with their history | `closed`, `reopen hacker news` |
+| **Frequent sites** (autofill), **past searches**, **bookmarks**, **history** | `gith`, `ramen` |
+| **Tab and window commands** | `close duplicates`, `close other tabs`, `reopen closed tab`, `pin tab`, `mute tab`, `move tab to new window`, `copy url`, `screenshot` |
+| **Site search** | `@yt lofi`, `@gh wxt`, `useEffect mdn` |
+| **Calculator** and **equation solver** | `2^10 / 3`, `15% of 80`, `tip 18% 64.20 for 3`, `5x + 3 = 8` |
+| **Units** and **currency** (ECB rates) | `10 km to mi`, `72 f in c`, `3 cups to ml`, `25 usd to eur` |
+| **Color** | `#ff8800`, `rgb(30 144 255)`, `color picker` |
+| **Dates and time zones** | `days until christmas`, `90 days from today`, `3pm est in tokyo`, `time in lagos`, `unix 1700000000` |
+| **Hashes and encoders** | `sha256 hello`, `md5 hello`, `base64 hi`, `urlencode a b`, `255 to hex`, `snake Hello World` |
+| **Inspect** pasted JWTs and JSON | paste a token or `{"a":1}` |
+| **Generators** (crypto-random) | `password 24`, `uuid`, `flip a coin`, `random 1-100`, `roll 2d6+3` |
+| **Dictionary** and **spelling** | `define ephemeral`, `spell definately` |
+| **Weather** | `weather tokyo` |
+| **QR codes**, generated locally | `qr`, `qr https://example.com` |
+| **AI chat**, optionally about the current page | `ai explain this error`, `summarize this page` |
+
+## Where the bar shows up, and the honest limits
+
+Browsers don't let an extension take over everything. Here's what MoonCow does and what it can't:
+
+| Surface | What works | The catch |
+| --- | --- | --- |
+| **Shortcut** (Ctrl+E / ⌘E) | Opens the bar over any normal page. | Firefox and Chrome both let you change it (`about:addons` → gear → Manage Extension Shortcuts, or `chrome://extensions/shortcuts`). If the browser or another extension already owns the key, the browser wins. Some sites grab keys first; MoonCow also listens in the page as a fallback. |
+| **Browser pages** (`about:`/`chrome://` pages, the extension stores, PDF viewers) | The shortcut opens the bar in a small window instead. | Extensions can't put anything on top of these pages. |
+| **New tab page** | Every new tab is the bar at full size. | Both browsers put the cursor in the address bar on a new tab and don't let a page take it, so click the bar or press Tab once. In Firefox and Zen you choose between MoonCow and the default in **Settings → Home → New tabs**. In Chrome, turning it off in MoonCow settings hands new tabs back to Chrome's page. |
+| **Address bar** | Type `mc` and a space, then a calculation, conversion, date, hash or `@site` query to get answers in the dropdown. Enter opens addresses, site searches, or a web search. | Extensions can't replace the address bar or its suggestions, and can't claim Ctrl+L / Ctrl+T. |
+
+## AI
+
+AI is optional and runs on your own key. MoonCow talks to any **OpenAI-compatible Chat Completions** endpoint, streams the answer, and renders Markdown safely (it never injects HTML from the model).
+
+- **OpenAI**: base URL `https://api.openai.com/v1`, model `gpt-6-luna` (the default; any model name works).
+- **OpenRouter**: `https://openrouter.ai/api/v1`.
+- **Local**: Ollama (`http://localhost:11434/v1`), LM Studio (`http://localhost:1234/v1`), llama.cpp, vLLM. Local servers usually don't need a key.
+
+Set it up in **Settings** (type `settings`), or just try asking something and the bar walks you through it. The key lives in the browser's extension storage on your machine and is only ever sent, as a Bearer token, to the endpoint you entered. When you press **This page** in the chat, the page's visible text (and your selection) goes with the question.
+
+## Privacy and permissions
+
+Everything stays in your browser except:
+
+- **AI questions** (and page text, when you include it) go to the AI endpoint you configured.
+- **Lookups you type explicitly** go to keyless public APIs: definitions and spelling (Wiktionary, Datamuse), weather and city times (Open-Meteo), exchange rates (Frankfurter), `my ip` (ipify).
+- **Search suggestions** go to Google only if you turn them on in settings. They're off by default because they send what you type as you type it. Your own past searches are suggested locally either way.
+
+Tabs, history, bookmarks, what you pick (MoonCow learns your favorites locally), colors, hashes, dates, JSON and JWT decoding never leave the browser. Favicons come from the browser's own cache (Chrome) or your open tabs (Firefox), never from a favicon service.
+
+| Permission | Why |
+| --- | --- |
+| `tabs` | Search, switch, close, pin, mute and move tabs. |
+| `history` | Frequent sites, past searches and history results; "Remove from history". |
+| `bookmarks` | Bookmark results and "Bookmark this page". |
+| `sessions` | Recently closed tabs and "Reopen closed tab". |
+| `storage` | Settings, the saved chat and what you pick, all local. |
+| `scripting`, `activeTab` | Add the bar to tabs that were open before MoonCow was installed; screenshot the visible tab when you ask. Browsers only allow the screenshot right after you open MoonCow with its shortcut or toolbar button. |
+| `clipboardWrite` | Copy answers. |
+| `favicon` (Chrome only) | Show site icons from Chrome's local cache. |
+| Content script on all pages | Draws the bar over the page and reads the page's text when you ask AI about it. |
+| Optional host access | Requested for one origin at a time: your AI endpoint when you save it, and Google Suggest if you turn suggestions on. Nothing else. |
+
+## Writing a tool
+
+Every built-in (tabs, the calculator, AI, everything) is a plugin on the same API in [`src/core`](src/core). A tool answers three questions: does this query belong to me, how sure am I, and what does the row look like and do. Here's the dice roller, which ships as [`src/tools/dice.ts`](src/tools/dice.ts) mostly to show this off:
+
+```ts
+import { copyAction, defineTool, RELEVANCE } from '@/core';
+import { secureInt } from '@/lib/random';
+
+export default defineTool({
+  id: 'dice',
+  name: 'Dice',
+  description: 'Roll dice in standard notation: d20, 2d6+3, roll 4d8.',
+  examples: ['roll', 'd20', 'roll 2d6+3'],
+
+  match(query) {
+    // Precise matching: the whole query is dice notation, or it starts with "roll".
+    // query.command() only matches a leading trigger, so "how to roll sushi" never gets here.
+    const afterRoll = query.command('roll');
+    const dice = parseDice(afterRoll === '' ? 'd6' : afterRoll ?? query.text);
+    if (!dice) return null;
+
+    const rolls = Array.from({ length: dice.count }, () => secureInt(1, dice.sides));
+    const total = rolls.reduce((a, b) => a + b, 0) + dice.modifier;
+
+    return {
+      id: 'roll',
+      kind: 'answer',                       // renders the answer big
+      title: `Roll ${dice.count}d${dice.sides}`,
+      answer: String(total),
+      icon: { glyph: 'dice' },
+      relevance: afterRoll !== null ? RELEVANCE.explicit : RELEVANCE.parsed,
+      actions: [
+        copyAction(String(total)),           // Enter
+        { title: 'Roll again', run: (ctx) => ctx.refresh() }, // ⌘Enter
+      ],
+    };
+  },
+});
+```
+
+Then add it to [`src/tools/index.ts`](src/tools/index.ts). That's it. The rest of the API:
+
+- **Matching**: `query.command(...)`, `query.is(...)`, `query.prefixOf(...)`, `query.suffix(...)` and anchored regexes. There's deliberately no "contains this word" helper.
+- **Ranking**: pick a `RELEVANCE` band (`explicit`, `parsed`, `strong`, `fallback`, `partial`, `weak`) honestly. One ranker sorts every tool's rows by band, then by kind, plus a small boost learned from what you pick. The boost can reorder rows within a band but never lift a loose match over a precise one.
+- **Async**: `match` can be `async` (results stream in), or return a row with a `hydrate()` step for network lookups (the converter fetches rates this way). Old answers can never overwrite a newer query.
+- **Rendering**: rows are data (title, subtitle, answer, icon, accessory). For anything richer, an action calls `ctx.showView(view)` and you get the panel body to yourself; the chat, color picker, QR code and help list are views.
+- **Actions** get a small context: `open`, `copy`, `toast`, `setQuery`, `refresh`, `showView`, `close`, and a `browser` bridge for tab work.
+
+## Development
+
+```sh
+npm run dev            # Chrome with live reload (WXT)
+npm run dev:firefox    # Firefox with live reload
+npm test               # unit tests (Vitest)
+npm run typecheck
+npm run lint           # typecheck + Mozilla's add-on linter on the Firefox build
+npm run test:e2e       # Playwright drives the built extension in Chromium
+npm run test:firefox   # same idea in real Firefox (or Zen: FIREFOX_BIN=/path/to/zen)
+npm run zip            # store-ready zips, plus the sources zip Firefox reviewers ask for
+```
+
+The test suite covers the tool API, ranking, every tool's answers, and a table of look-alike queries where tools must stay silent ("back to the future" must not run *Go back*, "password manager reviews" must not generate a password). The end-to-end tests load the real extension and check the overlay, tab switching, the action menu, tab commands, the new tab page and AI streaming against a local mock server.
+
+It's TypeScript on [WXT](https://wxt.dev), one source for both browsers. Layout: `src/core` (the tool API and ranking), `src/tools` (every built-in), `src/lib` (pure logic), `src/ui` (the bar), `src/entrypoints` (background, content script, the bar's page, new tab, settings).
+
+## Roadmap
+
+- Get it signed and listed on addons.mozilla.org and the Chrome Web Store.
+- Load third-party tools without a rebuild.
+- More verbs on more rows (send a tab to a window, tab groups in Chrome, Zen workspaces once Zen exposes them to extensions).
+- Better ranking from what you pick, still local.
+
+Bugs and ideas welcome. Open an issue with steps to reproduce; a short screen recording helps a ton.
 
 ## License
+
 MIT. Use it, fork it, ship your own flavor.
