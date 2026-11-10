@@ -120,7 +120,7 @@ export function convert(value: number, fromToken: string, toToken: string): Conv
 }
 
 // "10 km to mi", "5'11 in cm" is out of scope; "72 f in c", "3.5 cups to ml", "1,500 lbs → kg"
-const PATTERN = /^(-?[\d,]*\.?\d+)\s*([a-z°'"²/ ]+?)\s+(?:to|in|into|as|->|→|=)\s+([a-z°'"²/ ]+)$/i;
+const PATTERN = /^(-?[\d,]*\.?\d+)\s*([a-z°'"²/][a-z0-9°'"²/ ]*?)\s+(?:to|in|into|as|->|→|=)\s+([a-z°'"²/][a-z0-9°'"²/ ]*)$/i;
 
 export function parseConversion(text: string): Conversion | null {
   const m = text.trim().match(PATTERN);

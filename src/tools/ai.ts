@@ -23,7 +23,6 @@ function askResult(id: string, title: string, subtitle: string, prompt: string, 
     subtitle,
     icon: { glyph: 'sparkle' },
     relevance,
-    accessory: withPage ? undefined : 'Ask AI',
     actions: [
       { title: withPage ? 'Ask about this page' : 'Ask AI', run: (ctx) => ctx.showView(chatView({ prompt, includePage: withPage })) },
       ...(withPage ? [] : [{ title: 'Ask about this page', run: (ctx) => ctx.showView(chatView({ prompt, includePage: true })) } satisfies Action]),

@@ -24,19 +24,6 @@ export async function requestAiOrigin(baseUrl: string): Promise<boolean> {
   }
 }
 
-async function hasAiOrigin(baseUrl: string): Promise<boolean> {
-  const pattern = originPattern(baseUrl);
-  if (!pattern) return false;
-  // Firefox does not expose the permissions API to the overlay frame; the
-  // background checks instead.
-  try {
-    const res = (await browser.runtime.sendMessage({ type: 'has-origin', pattern })) as boolean | undefined;
-    return !!res;
-  } catch {
-    return false;
-  }
-}
-
 interface ChatOptions {
   prompt?: string;
   includePage?: boolean;
@@ -258,7 +245,9 @@ export function chatView(options: ChatOptions = {}): View {
       const start = async () => {
         const settings = await loadSettings();
         modelLabel.textContent = settings.ai.model;
-        const ready = !!settings.ai.baseUrl && !!settings.ai.model && (await hasAiOrigin(settings.ai.baseUrl)) &&
+        // Hosted APIs need a key; local servers usually do not. Host permission
+        // is requested when settings are saved; endpoints that allow CORS work without it.
+        const ready = !!settings.ai.baseUrl && !!settings.ai.model &&
           (!!settings.ai.apiKey || !/api\.openai\.com|openrouter\.ai/.test(settings.ai.baseUrl));
         if (!ready) {
           renderSetup(ctx, () => { composer.hidden = false; void start(); });

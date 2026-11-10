@@ -4,8 +4,13 @@ import { RELEVANCE, type Result } from '@/core/types';
 import { base64Decode, base64Encode, digest, type HashAlgorithm } from '@/lib/hash';
 import { answer } from './_helpers';
 
+// Split on separators, camelCase boundaries and acronym boundaries ("XMLHttp" -> "XML Http").
 const words = (s: string) =>
-  s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(/[^A-Za-z0-9]+/).filter(Boolean);
+  s
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean);
 
 export const CASES: Record<string, (s: string) => string> = {
   upper: (s) => s.toUpperCase(),

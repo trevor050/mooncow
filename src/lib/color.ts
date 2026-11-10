@@ -77,7 +77,9 @@ export function hslToRgb(h: number, s: number, l: number): { r: number; g: numbe
   const k = (n: number) => (n + h / 30) % 12;
   const a = s * Math.min(l, 1 - l);
   const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-  return { r: Math.round(f(0) * 255), g: Math.round(f(8) * 255), b: Math.round(f(4) * 255) };
+  // Round half up on the exact value: 0.1 * 255 is 25.5, not 25.4999…
+  const channel = (n: number) => Math.round(Number((f(n) * 255).toFixed(6)));
+  return { r: channel(0), g: channel(8), b: channel(4) };
 }
 
 export function formatRgb({ r, g, b, a }: Rgba): string {

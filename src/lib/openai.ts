@@ -130,7 +130,7 @@ export async function* streamChat(
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') throw err;
-    throw new AiError(`Could not reach ${settings.baseUrl}. Is the server running and allowed in settings?`);
+    throw new AiError(`Could not reach ${settings.baseUrl}. Check that the server is running, then press Save in MoonCow settings so the browser lets MoonCow talk to it.`);
   }
   if (!res.ok) throw new AiError(await errorMessage(res), res.status);
   if (!res.body) throw new AiError('The server returned an empty response.');

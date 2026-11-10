@@ -30,14 +30,20 @@ interface GeoResult {
   admin1?: string;
 }
 
-export function parseWeatherQuery(q: { commandWithArg(...t: string[]): string | null; match(re: RegExp): RegExpMatchArray | null }): string | null {
+export function parseWeatherQuery(q: { text?: string; commandWithArg(...t: string[]): string | null; match(re: RegExp): RegExpMatchArray | null }): string | null {
   const place =
     q.commandWithArg('weather in', 'weather for', 'weather', 'forecast for', 'forecast in', 'forecast', 'temperature in', 'temp in') ??
     q.match(/^(.+?)\s+(?:weather|forecast)$/i)?.[1] ??
     null;
   if (!place) return null;
   const clean = place.replace(/[?.!]+$/, '').trim();
-  return /^[\p{L}][\p{L} ,.'-]{1,60}$/u.test(clean) ? clean : null;
+  if (!/^[\p{L}][\p{L} ,.'-]{1,60}$/u.test(clean) || clean.split(/\s+/).length > 4) return null;
+  // "weather the storm meaning" is an idiom lookup, not a forecast. Without
+  // "in"/"for", a place does not start with an article or carry dictionary words.
+  const explicit = /^(weather|forecast|temperature|temp) (in|for) /i.test(q.text ?? '');
+  if (/\b(meaning|mean|means|definition|synonyms?|idiom|vs|or|and)\b/i.test(clean)) return null;
+  if (!explicit && /^(the|a|an|this|that|my|your|our|their)\b/i.test(clean)) return null;
+  return clean;
 }
 
 export default defineTool({
