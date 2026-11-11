@@ -65,8 +65,9 @@ test('every row has verbs: the action menu closes a tab', async ({ context, serv
   const menu = frame.locator('.menu');
   await expect(menu).toBeVisible();
   await expect(menu.locator('.menu-item')).toHaveText([/Switch to tab/, /Close tab/, /Pin tab/, /Mute tab/, /Duplicate tab/, /Move to new window/, /Reload tab/, /Copy URL/]);
-  await menu.press('ArrowDown');
-  await menu.press('Enter');
+  await expect(menu).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
   await expect.poll(() => victim.isClosed()).toBe(true);
 });
 

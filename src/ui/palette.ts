@@ -68,7 +68,7 @@ export class Palette {
     this.toastEl = h('span', { class: 'toast', role: 'status', 'aria-live': 'polite' });
     this.hints = h('span', { class: 'hints' });
     this.footer = h('footer', { class: 'footer' }, this.toastEl, this.hints);
-    this.menu = h('div', { class: 'menu', role: 'menu', hidden: true });
+    this.menu = h('div', { class: 'menu', role: 'menu', tabindex: '-1', hidden: true });
 
     const searchIcon = h('span', { class: 'bar-icon' }, glyph('search', 18));
     this.root = h(
@@ -386,7 +386,6 @@ export class Palette {
       else if (e.key === 'Enter') { e.preventDefault(); const a = result.actions[this.menuIndex]; this.closeMenu(); void this.runAction(result, a); }
       else if (isMod(e) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.closeMenu(); }
     };
-    this.menu.setAttribute('tabindex', '-1');
     this.menu.onkeydown = onKey;
   }
 
