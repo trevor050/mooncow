@@ -86,9 +86,11 @@ Browsers don't let an extension take over everything. Here's what MoonCow does a
 | Surface | What works | The catch |
 | --- | --- | --- |
 | **Shortcut** (Ctrl+E / ⌘E) | Opens the bar over any normal page. | Firefox and Chrome both let you change it (`about:addons` → gear → Manage Extension Shortcuts, or `chrome://extensions/shortcuts`). If the browser or another extension already owns the key, the browser wins. Some sites grab keys first; MoonCow also listens in the page as a fallback. |
-| **Browser pages** (`about:`/`chrome://` pages, the extension stores, PDF viewers) | The shortcut opens the bar in a small window instead. | Extensions can't put anything on top of these pages. |
+| **Browser pages** (`about:`/`chrome://` pages, the extension stores, PDF viewers) | The assigned extension shortcut or toolbar button opens the bar in a small window instead. | Extensions can't put anything on top of these pages. |
 | **New tab page** | Every new tab is the bar at full size. | Both browsers put the cursor in the address bar on a new tab and don't let a page take it, so click the bar or press Tab once. In Firefox and Zen you choose between MoonCow and the default in **Settings → Home → New tabs**. In Chrome, turning it off in MoonCow settings hands new tabs back to Chrome's page. |
 | **Address bar** | Type `mc` and a space, then a calculation, conversion, date, hash or `@site` query to get answers in the dropdown. Enter opens addresses, site searches, or a web search. | Extensions can't replace the address bar or its suggestions, and can't claim Ctrl+L / Ctrl+T. |
+
+On Windows, Zen reserves Ctrl+E for its own search. MoonCow's page fallback still opens the overlay, but it cannot run on browser pages. Assign an unused extension shortcut for those pages; Ctrl+Shift+Y was tested with the popup on Zen's Settings page.
 
 Zen normally opens its floating URL bar for Ctrl+T. To use MoonCow as the full new-tab page, set `zen.urlbar.replace-newtab` to `false` in `about:config` and select MoonCow for new tabs. The `mc` keyword also works in Zen's floating address bar.
 

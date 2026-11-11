@@ -18,6 +18,7 @@ MoonCow: browser command bar (Firefox/Zen first, Chromium too). WXT + TypeScript
 
 ## Hazards (hard-won)
 - Zen Window Sync exposes mirrors as separate tab IDs; deleting a mirror can delete the protected original. Detect `runtime.getBrowserInfo().zen` (name/UA still say Firefox). Bulk close pauses with multiple normal Zen windows; retain the snapshot checks in `browser-ops.ts`.
+- Zen on Windows reserves Ctrl+E: the page fallback works, but internal-page popup needs an unused extension shortcut (Ctrl+Shift+Y tested). `commands.getAll()` reporting Ctrl+E does not prove dispatch.
 - Shared Windows testing: use `MOONCOW_E2E_PROFILE` for one Chromium process/profile per suite and `MOONCOW_FIREFOX_PROFILE` for smoke. Optional `MOONCOW_BROWSER_GATE` runs before each Windows launch; installed Chrome uses `MOONCOW_CHROMIUM_BIN` + CDP over Playwright's pipe.
 - Firefox gives a moz-extension iframe inside a web page only the content-script API (no tabs/history/sessions/permissions). ALL browser access goes through `runtime.sendMessage({type:'op'})` → `lib/browser-ops.ts`. Chrome iframes have full API, so Chrome-only testing hides this.
 - `permissions.request` is unavailable in the Firefox overlay frame and must be the first await in a click handler; AI setup in overlay redirects to options page.
