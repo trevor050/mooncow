@@ -1,0 +1,10 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "noImplicitOverride": true,
+    "types": ["vitest/globals"]
+  },
+  "include": ["src", "test", ".wxt/wxt.d.ts", "wxt.config.ts", "vitest.config.ts"]
+}

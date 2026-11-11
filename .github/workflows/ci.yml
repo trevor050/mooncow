@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck, unit tests, build, lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build Chromium and Firefox packages
+        run: npm run zip
+      - name: Mozilla add-on linter
+        run: npx web-ext lint --source-dir .output/firefox-mv3 --self-hosted
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mooncow-chrome
+          path: .output/*-chrome.zip
+          if-no-files-found: error
+          include-hidden-files: true  # WXT writes to .output/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mooncow-firefox
+          path: |
+            .output/*-firefox.zip
+            .output/*-sources.zip
+          if-no-files-found: error
+          include-hidden-files: true
+
+  chromium-e2e:
+    name: End-to-end (Chromium, real extension)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build:chrome
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+
+  firefox-smoke:
+    name: Smoke test (Firefox, real extension)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - uses: browser-actions/setup-firefox@v1
+        id: firefox
+        with:
+          firefox-version: latest
+      - run: npm run build:firefox
+      - run: npm run test:firefox
+        env:
+          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}

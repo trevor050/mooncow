@@ -51,3 +51,10 @@ config.local.json
 # Temporary files
 tmp/
 temp/ 
+# Build output
+.output/
+.wxt/
+web-ext-artifacts/
+test-results/
+playwright-report/
+.shots/
