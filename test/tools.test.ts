@@ -344,6 +344,7 @@ const MUST_STAY_QUIET: [string, string[]][] = [
   ['mute swan', ['browser-commands']],
   ['weather the storm meaning', ['weather']],
   ['the define keyword in c', ['dictionary']],
+  ['define the relationship', ['dictionary']],
   ['2024-01-15', ['calculator']],
   ['iphone 15', ['calculator', 'converter']],
   ['10 things to do in paris', ['converter', 'datetime']],

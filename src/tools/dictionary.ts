@@ -109,6 +109,9 @@ export default defineTool({
       q.match(/^what does (.+?) mean\??$/i)?.[1] ??
       q.match(/^(.+?)\s+(?:definition|meaning)$/i)?.[1] ??
       null;
+    // Article-led phrases are usually ordinary searches (for example,
+    // "define the relationship"), rather than dictionary headwords.
+    if (word && /^(?:the|a|an)\s+/i.test(word)) return null;
     if (word && WORD.test(word)) return defineResult(word.replace(/[?"“”]/g, '').trim(), RELEVANCE.explicit);
     return null;
   },
