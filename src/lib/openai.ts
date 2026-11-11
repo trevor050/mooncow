@@ -127,6 +127,8 @@ export async function* streamChat(
       body: JSON.stringify(buildRequestBody(settings, messages)),
       signal,
       credentials: 'omit',
+      // Never forward a question (or its authorization) to a redirected endpoint.
+      redirect: 'error',
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') throw err;
