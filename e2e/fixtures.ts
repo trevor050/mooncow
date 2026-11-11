@@ -68,6 +68,9 @@ export const test = base.extend<{ context: BrowserContext; extensionId: string; 
       viewport: { width: 1280, height: 800 },
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
+    // The MV3 worker starts asynchronously. Every test may use it, including
+    // tests that do not request the extensionId fixture.
+    if (!context.serviceWorkers().length) await context.waitForEvent('serviceworker');
     await use(context);
     await context.close();
   },
