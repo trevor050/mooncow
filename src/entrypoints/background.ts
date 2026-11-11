@@ -64,14 +64,20 @@ export default defineBackground(() => {
   });
   browser.action.onClicked.addListener((tab) => void togglePalette(tab));
 
-  browser.runtime.onMessage.addListener((message: BackgroundRequest | OpRequest, sender) => {
-    if (message?.type === 'op') return handleOp(message, sender);
-    if (message?.type === 'whoami') {
-      return Promise.resolve({ tabId: sender.tab?.id ?? null, windowId: sender.tab?.windowId ?? null });
-    }
-    if (message?.type === 'open-options') return browser.runtime.openOptionsPage();
-    if (message?.type === 'has-origin') return browser.permissions.contains({ origins: [message.pattern] });
-    return undefined;
+  browser.runtime.onMessage.addListener((message: BackgroundRequest | OpRequest, sender, sendResponse) => {
+    let response: Promise<unknown> | undefined;
+    if (message?.type === 'op') response = handleOp(message, sender);
+    else if (message?.type === 'whoami') response = Promise.resolve({ tabId: sender.tab?.id ?? null, windowId: sender.tab?.windowId ?? null });
+    else if (message?.type === 'open-options') response = browser.runtime.openOptionsPage();
+    else if (message?.type === 'has-origin') response = browser.permissions.contains({ origins: [message.pattern] });
+    if (!response) return undefined;
+    // Promise return values are ignored by Chrome before 148. The callback
+    // channel works in those versions and in Firefox/Zen.
+    void response.then(sendResponse, (err) => {
+      console.warn('[mooncow] background request failed', err);
+      sendResponse(undefined);
+    });
+    return true;
   });
 
   // ---------------------------------------------------------------- AI chat

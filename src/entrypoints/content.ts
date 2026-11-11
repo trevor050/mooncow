@@ -114,10 +114,11 @@ export default defineContentScript({
       true,
     );
 
-    browser.runtime.onMessage.addListener((message: ContentRequest) => {
+    browser.runtime.onMessage.addListener((message: ContentRequest, _sender, sendResponse) => {
       if (message?.type === 'mooncow:toggle') {
         toggle();
-        return Promise.resolve(true);
+        sendResponse(true);
+        return undefined;
       }
       if (message?.type === 'mooncow:page-text') {
         const text = (document.body?.innerText || '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
@@ -127,7 +128,8 @@ export default defineContentScript({
           text: text.slice(0, 12000),
           selection: String(window.getSelection() || '').slice(0, 4000),
         };
-        return Promise.resolve(page);
+        sendResponse(page);
+        return undefined;
       }
       return undefined;
     });
