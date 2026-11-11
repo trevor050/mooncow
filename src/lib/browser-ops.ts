@@ -139,6 +139,19 @@ async function closeTabs(host: Host, action: 'close-duplicates' | 'close-others'
 }
 
 let sitesCache: { at: number; sites: SiteInfo[] } | null = null;
+let sitesRevision = 0;
+function invalidateSites(): void { sitesCache = null; sitesRevision++; }
+
+/** Keep history-derived ranking fresh without rescanning on every keystroke. */
+export function watchSiteChanges(): void {
+  browser.history.onVisited.addListener(invalidateSites);
+  browser.history.onVisitRemoved.addListener(invalidateSites);
+  browser.tabs.onCreated.addListener(invalidateSites);
+  browser.tabs.onRemoved.addListener(invalidateSites);
+  browser.tabs.onUpdated.addListener((_id, changes) => {
+    if (changes.url !== undefined) invalidateSites();
+  });
+}
 
 export const ops = {
   tabs,
@@ -175,12 +188,13 @@ export const ops = {
   async sites(host: Host): Promise<SiteInfo[]> {
     const now = Date.now();
     if (sitesCache && now - sitesCache.at < 10 * 60_000) return sitesCache.sites;
+    const revision = sitesRevision;
     const [items, open] = await Promise.all([
       browser.history.search({ text: '', startTime: now - 14 * DAY, maxResults: 5000 }),
       tabs(host),
     ]);
     const sites = aggregateSites(items, open.map((t) => t.url));
-    sitesCache = { at: now, sites };
+    if (revision === sitesRevision) sitesCache = { at: now, sites };
     return sites;
   },
 
@@ -208,7 +222,7 @@ export const ops = {
 
   /** Returns a PNG data URL for 'screenshot'; nothing otherwise. */
   async tabAction(host: Host, action: TabAction, tabId?: number): Promise<string | void> {
-    sitesCache = null;
+    invalidateSites();
     if (action === 'new-tab') { await browser.tabs.create({}); return; }
     if (action === 'new-window') { await browser.windows.create({}); return; }
     if (action === 'close-duplicates' || action === 'close-others' || action === 'close-right') {
@@ -257,7 +271,7 @@ export const ops = {
   },
 
   async deleteHistory(_host: Host, url: string) {
-    sitesCache = null;
+    invalidateSites();
     await browser.history.deleteUrl({ url });
   },
 

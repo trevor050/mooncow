@@ -1,7 +1,7 @@
 import { Query } from '@/core/query';
 import { ToolRegistry } from '@/core/registry';
 import type { ActionContext, Result } from '@/core/types';
-import { handleOp, type OpRequest } from '@/lib/browser-ops';
+import { handleOp, watchSiteChanges, type OpRequest } from '@/lib/browser-ops';
 import { AI_PORT, type AiEvent, type AiRequest, type BackgroundRequest } from '@/lib/messages';
 import { AiError, streamChat, type ChatMessage } from '@/lib/openai';
 import { loadSettings } from '@/lib/settings';
@@ -19,6 +19,7 @@ const SYSTEM_PROMPT = (now: Date) =>
   `Today is ${now.toDateString()}.`;
 
 export default defineBackground(() => {
+  watchSiteChanges();
   // ------------------------------------------------------------ open the bar
   async function openWindowFallback(tab: { id?: number; windowId?: number }) {
     const url = browser.runtime.getURL(`/palette.html?surface=window&tab=${tab.id ?? ''}&window=${tab.windowId ?? ''}` as '/palette.html');
