@@ -23,6 +23,7 @@ export interface PageText {
 export type FrameMessage =
   | { mooncow: 'open' }
   | { mooncow: 'close' }
+  | { mooncow: 'hide' }
   | { mooncow: 'ready' };
 
 export const AI_PORT = 'mooncow-ai';

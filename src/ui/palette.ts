@@ -98,6 +98,15 @@ export class Palette {
     this.run();
   }
 
+  /** Stop in-flight work when the host hides the palette, including AI views. */
+  hide(): void {
+    this.controller?.abort();
+    this.generation++;
+    this.menuOpen = false;
+    this.menu.hidden = true;
+    this.closeView(false);
+  }
+
   get query(): string {
     return this.input.value;
   }

@@ -44,6 +44,7 @@ void (async () => {
   window.addEventListener('message', (event) => {
     if (event.source !== window.parent) return;
     if ((event.data as FrameMessage)?.mooncow === 'open') palette.show();
+    if ((event.data as FrameMessage)?.mooncow === 'hide') palette.hide();
   });
   if (surface === 'window') window.addEventListener('blur', () => setTimeout(() => !document.hasFocus() && close(), 150));
   palette.show();

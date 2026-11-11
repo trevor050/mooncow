@@ -32,3 +32,31 @@ it('focuses the action menu on the first Ctrl+K so arrows act on it', () => {
   document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
   expect(document.querySelector('.menu-item.selected')?.textContent).toContain('Second');
 });
+
+it('cleans up an open view when the palette is hidden', () => {
+  const palette = setup();
+  const cleanup = vi.fn();
+  palette.showView({ id: 'stream', title: 'Stream', mount: () => cleanup });
+  palette.hide();
+  expect(cleanup).toHaveBeenCalledOnce();
+  palette.show();
+  expect(document.activeElement).toBe(document.querySelector('.query'));
+});
+
+it('disconnects a streaming AI port when its view is hidden', async () => {
+  const { fakeBrowser } = await import('wxt/testing/fake-browser');
+  const { chatView } = await import('@/ui/views/chat-view');
+  await fakeBrowser.storage.local.set({ settings: { ...DEFAULT_SETTINGS, ai: { ...DEFAULT_SETTINGS.ai, baseUrl: 'http://127.0.0.1:12345/v1', model: 'mock' } } });
+  const disconnect = vi.fn();
+  const connect = vi.spyOn(fakeBrowser.runtime, 'connect').mockReturnValue({
+    postMessage: vi.fn(), disconnect,
+    onMessage: { addListener: vi.fn() }, onDisconnect: { addListener: vi.fn() },
+  } as never);
+  const palette = setup();
+  palette.showView(chatView({ prompt: 'local test' }));
+  await vi.waitFor(() => expect(connect).toHaveBeenCalledOnce());
+  palette.hide();
+  expect(disconnect).toHaveBeenCalledOnce();
+  connect.mockRestore();
+  fakeBrowser.reset();
+});

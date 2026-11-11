@@ -142,3 +142,20 @@ test('turning the new tab page off hands new tabs back to Chrome', async ({ cont
   await page.goto(`chrome-extension://${extensionId}/newtab.html`).catch(() => {});
   await expect.poll(() => worker.evaluate(async () => (await chrome.tabs.query({})).map((t) => t.url || t.pendingUrl).join(' '))).toContain('chrome://new-tab-page');
 });
+
+test('closing the bar cancels a local AI stream', async ({ context, server, extensionId }) => {
+  const [worker] = context.serviceWorkers();
+  await worker.evaluate(async (baseUrl) => {
+    await chrome.storage.local.set({ settings: { theme: 'system', suggestions: false, newTabPage: true, ai: { baseUrl, apiKey: '', model: 'mock-model', reasoningEffort: '' } } });
+  }, server.base + '/slow/v1');
+  const page = await context.newPage();
+  await page.goto(server.base);
+  const frame = await openOverlay(page);
+  await frame.locator('.query').fill('ai cancel this local stream');
+  await frame.locator('.query').press('Enter');
+  await expect(frame.locator('.msg.assistant.streaming')).toContainText('streaming');
+  await frame.locator('.chat-input').press(`${mod}+e`);
+  await expect(page.locator('mooncow-palette')).toBeHidden();
+  await expect.poll(() => server.cancelled()).toBeGreaterThan(0);
+  expect(extensionId).toBeTruthy();
+});

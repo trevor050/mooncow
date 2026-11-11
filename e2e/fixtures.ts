@@ -15,7 +15,18 @@ function startServer() {
     '/figma': 'MoonCow bar – Figma',
     '/linear': 'MOO-118 Rank open tabs above suggestions – Linear',
   };
+  let cancelledStreams = 0;
   const server = http.createServer((req, res) => {
+    if (req.url === '/slow/v1/chat/completions') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', '*');
+      if (req.method === 'OPTIONS') return res.end();
+      req.resume();
+      res.setHeader('Content-Type', 'text/event-stream');
+      const timer = setInterval(() => res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'streaming ' } }] })}\n\n`), 100);
+      res.on('close', () => { clearInterval(timer); cancelledStreams++; });
+      return;
+    }
     if (req.url?.startsWith('/v1/chat/completions')) {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Headers', '*');
@@ -36,12 +47,12 @@ function startServer() {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.end(`<!doctype html><title>${pages[key] || 'Page'}</title><body style="font:16px system-ui;padding:40px;max-width:720px"><h1>${pages[key] || 'Page'}</h1><p>Some article text about tonkotsu broth and noodles.</p></body>`);
   });
-  return new Promise<{ base: string; close: () => void }>((resolve) =>
-    server.listen(0, '127.0.0.1', () => resolve({ base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => server.close() })),
+  return new Promise<{ base: string; close: () => void; cancelled: () => number }>((resolve) =>
+    server.listen(0, '127.0.0.1', () => resolve({ base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => { server.closeAllConnections(); server.close(); }, cancelled: () => cancelledStreams })),
   );
 }
 
-export const test = base.extend<{ context: BrowserContext; extensionId: string; server: { base: string } }>({
+export const test = base.extend<{ context: BrowserContext; extensionId: string; server: { base: string; cancelled: () => number } }>({
   // eslint-disable-next-line no-empty-pattern
   server: async ({}, use) => {
     const s = await startServer();

@@ -68,6 +68,7 @@ export default defineContentScript({
       if (!host) return;
       host.style.setProperty('display', 'none', 'important');
       open = false;
+      frame?.contentWindow?.postMessage({ mooncow: 'hide' } satisfies FrameMessage, '*');
       // Pull keyboard focus out of the hidden frame, or the next key press
       // (including the shortcut) would land in an invisible input.
       frame?.blur();

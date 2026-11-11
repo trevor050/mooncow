@@ -54,6 +54,7 @@ export async function bootPalette(options: { surface: Surface; host: HostTab; mo
     stats,
     saveStats: (s) => void browser.storage.local.set({ [PICKS_KEY]: s }),
     close: () => {
+      palette.hide();
       env.invalidate();
       options.close();
     },

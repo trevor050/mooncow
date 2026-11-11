@@ -264,9 +264,7 @@ export function chatView(options: ChatOptions = {}): View {
       };
       void start();
 
-      return () => {
-        try { port?.disconnect(); } catch {}
-      };
+      return () => stop();
     },
   };
 }
