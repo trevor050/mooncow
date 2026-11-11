@@ -17,6 +17,15 @@ function startServer() {
   };
   let cancelledStreams = 0;
   const server = http.createServer((req, res) => {
+    if (req.url === '/fail/v1/chat/completions') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', '*');
+      if (req.method === 'OPTIONS') return res.end();
+      req.resume();
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Local mock endpoint unavailable' } }));
+      return;
+    }
     if (req.url === '/slow/v1/chat/completions') {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Headers', '*');

@@ -162,3 +162,25 @@ test('closing the bar cancels a local AI stream', async ({ context, server, exte
   await expect.poll(() => server.cancelled()).toBeGreaterThan(0);
   expect(extensionId).toBeTruthy();
 });
+
+test('a failing local AI endpoint shows an error and allows retry', async ({ context, server }) => {
+  const [worker] = context.serviceWorkers();
+  const configure = (baseUrl: string) => worker.evaluate(async (baseUrl) => {
+    await chrome.storage.local.set({ settings: { theme: 'system', suggestions: false, newTabPage: true, ai: { baseUrl, apiKey: '', model: 'mock-model', reasoningEffort: '' } } });
+  }, baseUrl);
+  await configure(server.base + '/fail/v1');
+  const page = await context.newPage();
+  await page.goto(server.base);
+  const frame = await openOverlay(page);
+  await frame.locator('.query').fill('ai test local failure');
+  await frame.locator('.query').press('Enter');
+  await expect(frame.locator('.msg.error')).toContainText('Local mock endpoint unavailable');
+  await expect(frame.locator('.send')).not.toHaveClass(/stop/);
+
+  await configure(server.base + '/v1');
+  await frame.getByRole('button', { name: 'New chat' }).click();
+  await frame.locator('.chat-input').fill('try again');
+  await frame.locator('.chat-input').press('Enter');
+  await expect(frame.locator('.msg.assistant')).toContainText('Model was mock-model.');
+  await expect(frame.locator('.msg.error')).toHaveCount(0);
+});
