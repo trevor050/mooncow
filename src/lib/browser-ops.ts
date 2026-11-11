@@ -22,15 +22,9 @@ function hostOf(url: string): string {
   }
 }
 
-/** Normalize for duplicate detection: ignore the fragment and a trailing slash. */
+/** Only browser-canonical exact URLs are duplicates; fragments and path slashes can carry state. */
 export function normalizeForDuplicates(url: string): string {
-  try {
-    const u = new URL(url);
-    u.hash = '';
-    return u.href.replace(/\/$/, '');
-  } catch {
-    return url;
-  }
+  try { return new URL(url).href; } catch { return url; }
 }
 
 /** Which tabs "Close duplicate tabs" removes: keep the active one, else a pinned one, else the most recently used. */
@@ -45,7 +39,7 @@ export function duplicateTabIds(tabs: Pick<TabInfo, 'id' | 'url' | 'active' | 'l
   for (const group of groups.values()) {
     if (group.length < 2) continue;
     const keep = group.find((t) => t.active) || group.find((t) => t.pinned) || [...group].sort((a, b) => b.lastAccessed - a.lastAccessed)[0];
-    for (const t of group) if (t !== keep && !t.pinned) remove.push(t.id);
+    for (const t of group) if (t !== keep && !t.pinned && !t.active) remove.push(t.id);
   }
   return remove;
 }
@@ -93,6 +87,55 @@ function target(host: Host, tabId?: number): number {
   const id = tabId ?? host.tabId;
   if (typeof id !== 'number') throw new Error('There is no tab to act on here');
   return id;
+}
+
+interface ClosingTab {
+  id?: number; windowId: number; index: number; url?: string; pendingUrl?: string;
+  pinned: boolean; active: boolean; hidden?: boolean; lastAccessed?: number;
+}
+interface ClosingSnapshot { tabs: ClosingTab[]; windows: number[] }
+
+async function closingSnapshot(host: Host): Promise<ClosingSnapshot> {
+  const runtime = browser.runtime as typeof browser.runtime & { getBrowserInfo?: () => Promise<{ name: string; zen?: unknown }> };
+  const [all, windows, info] = await Promise.all([
+    browser.tabs.query({}),
+    browser.windows.getAll({ windowTypes: ['normal'] }),
+    typeof runtime.getBrowserInfo === 'function' ? runtime.getBrowserInfo() : Promise.resolve(null),
+  ]);
+  if (typeof host.tabId !== 'number' || !all.some(t => t.id === host.tabId)) {
+    throw new Error('There is no current tab to protect. No tabs were closed.');
+  }
+  // Zen deliberately identifies as Firefox; only its extra browser-info field
+  // identifies Window Sync. WebExtensions expose no canonical shared-tab ID.
+  if (info && ('zen' in info || /zen/i.test(info.name)) && windows.length > 1) {
+    throw new Error('Zen shares tabs across windows. Use one browser window before bulk closing; no tabs were closed.');
+  }
+  if (windows.some(w => typeof w.id !== 'number')) throw new Error('Could not verify browser windows. No tabs were closed.');
+  return { tabs: all, windows: windows.map(w => w.id!).sort((a, b) => a - b) };
+}
+
+function closingState(snapshot: ClosingSnapshot): string {
+  return JSON.stringify([snapshot.windows, [...snapshot.tabs].sort((a, b) => a.id! - b.id!).map(t =>
+    [t.id, t.windowId, t.index, t.url, (t as { pendingUrl?: string }).pendingUrl, t.pinned, t.active, t.hidden])]);
+}
+
+async function closeTabs(host: Host, action: 'close-duplicates' | 'close-others' | 'close-right', tabId?: number): Promise<void> {
+  const snapshot = await closingSnapshot(host);
+  const anchor = snapshot.tabs.find(t => t.id === target(host, tabId));
+  if (!anchor) throw new Error('The selected tab changed. Try again; no tabs were closed.');
+  const eligible = snapshot.tabs.filter(t => typeof t.id === 'number' && !t.hidden);
+  const ids = action === 'close-duplicates'
+    ? duplicateTabIds(eligible.map(t => ({ id: t.id!, url: t.url || '', pinned: !!t.pinned,
+        active: !!t.active || t.id === host.tabId, lastAccessed: (t as { lastAccessed?: number }).lastAccessed || 0 })))
+    : eligible.filter(t => t.windowId === anchor.windowId && t.id !== anchor.id && t.id !== host.tabId && !t.pinned && !t.active &&
+        (action === 'close-others' || t.index > anchor.index)).map(t => t.id!);
+  if (!ids.length) return;
+  // Navigation, pinning, activation, reordering, or new windows invalidate the
+  // whole plan. Never apply a list derived from an outdated browser snapshot.
+  if (closingState(await closingSnapshot(host)) !== closingState(snapshot)) {
+    throw new Error('Tabs changed. Try again; no tabs were closed.');
+  }
+  await browser.tabs.remove(ids);
 }
 
 let sitesCache: { at: number; sites: SiteInfo[] } | null = null;
@@ -168,9 +211,8 @@ export const ops = {
     sitesCache = null;
     if (action === 'new-tab') { await browser.tabs.create({}); return; }
     if (action === 'new-window') { await browser.windows.create({}); return; }
-    if (action === 'close-duplicates') {
-      const ids = duplicateTabIds(await tabs(host));
-      if (ids.length) await browser.tabs.remove(ids);
+    if (action === 'close-duplicates' || action === 'close-others' || action === 'close-right') {
+      await closeTabs(host, action, tabId);
       return;
     }
     const id = target(host, tabId);
@@ -184,16 +226,6 @@ export const ops = {
       case 'mute': await browser.tabs.update(id, { muted: true }); return;
       case 'unmute': await browser.tabs.update(id, { muted: false }); return;
       case 'close': await browser.tabs.remove(id); return;
-      case 'close-others':
-      case 'close-right': {
-        const siblings = await browser.tabs.query({ windowId: tab.windowId });
-        const ids = siblings
-          .filter((t) => t.id !== id && !t.pinned && (action === 'close-others' || t.index > tab.index))
-          .map((t) => t.id)
-          .filter((x): x is number => typeof x === 'number');
-        if (ids.length) await browser.tabs.remove(ids);
-        return;
-      }
       case 'move-to-new-window': await browser.windows.create({ tabId: id }); return;
       case 'back': await browser.tabs.goBack(id); return;
       case 'forward': await browser.tabs.goForward(id); return;

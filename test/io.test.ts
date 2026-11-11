@@ -112,8 +112,8 @@ describe('markdown renderer', () => {
 describe('tab housekeeping', () => {
   const t = (id: number, url: string, over = {}) => ({ id, url, active: false, pinned: false, lastAccessed: id, ...over });
   it('finds duplicates, keeping the active, pinned or most recent copy', () => {
-    expect(normalizeForDuplicates('https://a.com/x/#frag')).toBe('https://a.com/x');
-    expect(duplicateTabIds([t(1, 'https://a.com/'), t(2, 'https://a.com'), t(3, 'https://a.com/#top', { active: true })])).toEqual([1, 2]);
+    expect(normalizeForDuplicates('https://a.com/x/#frag')).toBe('https://a.com/x/#frag');
+    expect(duplicateTabIds([t(1, 'https://a.com/'), t(2, 'https://a.com'), t(3, 'https://a.com/', { active: true })])).toEqual([1, 2]);
     expect(duplicateTabIds([t(1, 'https://b.com', { pinned: true }), t(2, 'https://b.com')])).toEqual([2]);
     expect(duplicateTabIds([t(1, 'https://c.com'), t(5, 'https://c.com')])).toEqual([1]);
     expect(duplicateTabIds([t(1, 'about:blank'), t(2, 'about:blank')])).toEqual([]);

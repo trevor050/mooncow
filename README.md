@@ -90,6 +90,8 @@ Browsers don't let an extension take over everything. Here's what MoonCow does a
 | **New tab page** | Every new tab is the bar at full size. | Both browsers put the cursor in the address bar on a new tab and don't let a page take it, so click the bar or press Tab once. In Firefox and Zen you choose between MoonCow and the default in **Settings → Home → New tabs**. In Chrome, turning it off in MoonCow settings hands new tabs back to Chrome's page. |
 | **Address bar** | Type `mc` and a space, then a calculation, conversion, date, hash or `@site` query to get answers in the dropdown. Enter opens addresses, site searches, or a web search. | Extensions can't replace the address bar or its suggestions, and can't claim Ctrl+L / Ctrl+T. |
 
+Zen shares tabs between windows in the same Space. Its extension API gives mirrors separate tab IDs, so MoonCow pauses **Close duplicate tabs**, **Close other tabs**, and **Close tabs to the right** while multiple Zen windows are open. Nothing is closed in that case. With one window, bulk closing preserves active and pinned tabs; duplicate cleanup only combines exact addresses, including their fragments and trailing path slashes.
+
 ## AI
 
 AI is optional and runs on your own key. MoonCow talks to any **OpenAI-compatible Chat Completions** endpoint, streams the answer, and renders Markdown safely (it never injects HTML from the model).
