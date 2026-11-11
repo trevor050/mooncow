@@ -70,7 +70,8 @@ async function launchContext(profile: string): Promise<BrowserContext> {
     headless: !process.env.HEADFUL,
     colorScheme: (process.env.COLOR_SCHEME as 'light' | 'dark') || 'light',
     viewport: { width: 1280, height: 800 },
-    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`, ...(executablePath ? ['--enable-unsafe-extension-debugging'] : [])],
+    ...(executablePath ? { ignoreDefaultArgs: ['--disable-extensions'] } : {}),
+    args: executablePath ? ['--enable-unsafe-extension-debugging'] : [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
   });
   try {
     if (executablePath) {
