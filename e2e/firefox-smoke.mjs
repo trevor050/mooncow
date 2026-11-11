@@ -9,6 +9,7 @@ import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
 import puppeteer from 'puppeteer-core';
+import { guardWindowsLaunch } from './browser-launch.mjs';
 
 const root = path.resolve('.output/firefox-mv3');
 const bin =
@@ -45,7 +46,8 @@ const check = (name, ok, detail = '') => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const browser = await puppeteer.launch({ browser: 'firefox', executablePath: bin, headless: process.env.HEADFUL ? false : true });
+guardWindowsLaunch();
+const browser = await puppeteer.launch({ userDataDir: process.env.MOONCOW_FIREFOX_PROFILE, browser: 'firefox', executablePath: bin, headless: process.env.HEADFUL ? false : true });
 try {
   await browser.installExtension(root);
   const other = await browser.newPage();

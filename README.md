@@ -90,6 +90,8 @@ Browsers don't let an extension take over everything. Here's what MoonCow does a
 | **New tab page** | Every new tab is the bar at full size. | Both browsers put the cursor in the address bar on a new tab and don't let a page take it, so click the bar or press Tab once. In Firefox and Zen you choose between MoonCow and the default in **Settings → Home → New tabs**. In Chrome, turning it off in MoonCow settings hands new tabs back to Chrome's page. |
 | **Address bar** | Type `mc` and a space, then a calculation, conversion, date, hash or `@site` query to get answers in the dropdown. Enter opens addresses, site searches, or a web search. | Extensions can't replace the address bar or its suggestions, and can't claim Ctrl+L / Ctrl+T. |
 
+Zen normally opens its floating URL bar for Ctrl+T. To use MoonCow as the full new-tab page, set `zen.urlbar.replace-newtab` to `false` in `about:config` and select MoonCow for new tabs. The `mc` keyword also works in Zen's floating address bar.
+
 Zen shares tabs between windows in the same Space. Its extension API gives mirrors separate tab IDs, so MoonCow pauses **Close duplicate tabs**, **Close other tabs**, and **Close tabs to the right** while multiple Zen windows are open. Nothing is closed in that case. With one window, bulk closing preserves active and pinned tabs; duplicate cleanup only combines exact addresses, including their fragments and trailing path slashes.
 
 ## AI
@@ -193,6 +195,8 @@ The Firefox smoke test finds a standard Firefox installation on macOS and Window
 $env:FIREFOX_BIN = "$env:ProgramFiles\Zen Browser\zen.exe"
 npm run test:firefox
 ```
+
+For a shared Windows test host, set `MOONCOW_E2E_PROFILE` to one persistent profile directory. The Chromium suite then uses one browser process for the run and clears test state between cases. `MOONCOW_CHROMIUM_BIN` selects installed Chrome; `MOONCOW_FIREFOX_PROFILE` reuses a Firefox/Zen smoke-test profile. `MOONCOW_BROWSER_GATE` can point to a host-provided PowerShell launch guard.
 
 The test suite covers the tool API, ranking, every tool's answers, and a table of look-alike queries where tools must stay silent ("back to the future" must not run *Go back*, "password manager reviews" must not generate a password). The end-to-end tests load the real extension and check the overlay, tab switching, the action menu, tab commands, the new tab page and AI streaming against a local mock server.
 

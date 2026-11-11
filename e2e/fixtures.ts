@@ -2,6 +2,7 @@ import { chromium, test as base, type BrowserContext, type Frame, type Page } fr
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
+import { guardWindowsLaunch } from './browser-launch.mjs';
 
 const extensionPath = path.resolve('.output/chrome-mv3');
 
@@ -61,27 +62,69 @@ function startServer() {
   );
 }
 
-export const test = base.extend<{ context: BrowserContext; extensionId: string; server: { base: string; cancelled: () => number } }>({
+async function launchContext(profile: string): Promise<BrowserContext> {
+  guardWindowsLaunch();
+  const executablePath = process.env.MOONCOW_CHROMIUM_BIN;
+  const context = await chromium.launchPersistentContext(profile, {
+    ...(executablePath ? { executablePath } : { channel: 'chromium' }),
+    headless: !process.env.HEADFUL,
+    colorScheme: (process.env.COLOR_SCHEME as 'light' | 'dark') || 'light',
+    viewport: { width: 1280, height: 800 },
+    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`, ...(executablePath ? ['--enable-unsafe-extension-debugging'] : [])],
+  });
+  try {
+    if (executablePath) {
+      // Branded Chrome no longer honors --load-extension. Its explicit testing
+      // switch exposes this CDP command without using a store or another profile.
+      const session = await context.browser()!.newBrowserCDPSession();
+      await session.send('Extensions.loadUnpacked', { path: extensionPath });
+      await session.detach();
+    }
+    if (!context.serviceWorkers().length) await context.waitForEvent('serviceworker');
+  } catch (error) {
+    await context.close();
+    throw error;
+  }
+  return context;
+}
+
+export const test = base.extend<{ context: BrowserContext; extensionId: string; server: { base: string; cancelled: () => number } }, { sharedContext: BrowserContext | null }>({
   // eslint-disable-next-line no-empty-pattern
   server: async ({}, use) => {
     const s = await startServer();
     await use(s);
     s.close();
   },
-  // eslint-disable-next-line no-empty-pattern
-  context: async ({}, use) => {
-    const context = await chromium.launchPersistentContext('', {
-      channel: 'chromium',
-      headless: !process.env.HEADFUL,
-      colorScheme: (process.env.COLOR_SCHEME as 'light' | 'dark') || 'light',
-      viewport: { width: 1280, height: 800 },
-      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
-    });
-    // The MV3 worker starts asynchronously. Every test may use it, including
-    // tests that do not request the extensionId fixture.
-    if (!context.serviceWorkers().length) await context.waitForEvent('serviceworker');
-    await use(context);
-    await context.close();
+  // Opt in for Windows/shared hosts: one profile and one process tree for the
+  // suite, with test state cleared through the browser between cases.
+  sharedContext: [async ({}, use) => {
+    const profile = process.env.MOONCOW_E2E_PROFILE;
+    if (!profile) { await use(null); return; }
+    const context = await launchContext(path.resolve(profile));
+    try { await use(context); } finally { await context.close(); }
+  }, { scope: 'worker' }],
+  context: async ({ sharedContext }, use) => {
+    if (sharedContext) {
+      const blank = await sharedContext.newPage();
+      for (const page of sharedContext.pages()) if (page !== blank) await page.close();
+      const [worker] = sharedContext.serviceWorkers();
+      await worker.evaluate(async () => {
+        await chrome.storage.local.clear();
+        await chrome.history.deleteAll();
+        const removeBookmarks = async (nodes: chrome.bookmarks.BookmarkTreeNode[]) => {
+          for (const node of nodes) {
+            if (node.url) await chrome.bookmarks.remove(node.id);
+            else if (node.children) await removeBookmarks(node.children);
+          }
+        };
+        await removeBookmarks(await chrome.bookmarks.getTree());
+      });
+      await sharedContext.clearCookies();
+      await use(sharedContext);
+    } else {
+      const context = await launchContext('');
+      try { await use(context); } finally { await context.close(); }
+    }
   },
   extensionId: async ({ context }, use) => {
     let [worker] = context.serviceWorkers();

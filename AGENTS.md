@@ -17,6 +17,8 @@ MoonCow: browser command bar (Firefox/Zen first, Chromium too). WXT + TypeScript
 - Entrypoints: `background.ts` (shortcut/action toggle, op relay, AI port, omnibox), `content.ts` (closed-shadow-root host + extension iframe overlay, page text), `palette/` (overlay + `?surface=window` popup fallback), `newtab/`, `options/`.
 
 ## Hazards (hard-won)
+- Zen Window Sync exposes mirrors as separate tab IDs; deleting a mirror can delete the protected original. Detect `runtime.getBrowserInfo().zen` (name/UA still say Firefox). Bulk close pauses with multiple normal Zen windows; retain the snapshot checks in `browser-ops.ts`.
+- Shared Windows testing: use `MOONCOW_E2E_PROFILE` for one Chromium process/profile per suite and `MOONCOW_FIREFOX_PROFILE` for smoke. Optional `MOONCOW_BROWSER_GATE` runs before each Windows launch; installed Chrome uses `MOONCOW_CHROMIUM_BIN` + CDP over Playwright's pipe.
 - Firefox gives a moz-extension iframe inside a web page only the content-script API (no tabs/history/sessions/permissions). ALL browser access goes through `runtime.sendMessage({type:'op'})` → `lib/browser-ops.ts`. Chrome iframes have full API, so Chrome-only testing hides this.
 - `permissions.request` is unavailable in the Firefox overlay frame and must be the first await in a click handler; AI setup in overlay redirects to options page.
 - After the bar closes itself, focus must be pulled out of the hidden iframe (`frame.blur()` in content.ts) or the next keystrokes vanish.
