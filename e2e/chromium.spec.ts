@@ -83,6 +83,9 @@ test('commands: close duplicate tabs, then reopen the closed one', async ({ cont
   await expect.poll(async () => (await rows(frame))[0]?.title).toBe('Close duplicate tabs');
   await frame.locator('.query').press('Enter');
   await expect.poll(() => context.pages().filter((p) => p.url().endsWith('/docs')).length).toBe(1);
+  // The tabs API resolves before the background response hides the overlay.
+  // Wait for the completed UI action before sending its next toggle.
+  await expect(page.locator('mooncow-palette')).toBeHidden();
 
   frame = await openOverlay(page);
   await frame.locator('.query').fill('closed');

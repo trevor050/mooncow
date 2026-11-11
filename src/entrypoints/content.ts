@@ -92,7 +92,12 @@ export default defineContentScript({
     window.addEventListener('message', (event) => {
       if (!frame || event.source !== frame.contentWindow) return;
       const data = event.data as FrameMessage;
-      if (data?.mooncow === 'close') hide();
+      if (data?.mooncow === 'close') {
+        // An action may close the bar before the opening shortcut's duplicate
+        // suppression expires. Its next deliberate shortcut must still open.
+        lastToggle = 0;
+        hide();
+      }
       if (data?.mooncow === 'ready' && open) frame.contentWindow?.postMessage({ mooncow: 'open' } satisfies FrameMessage, '*');
     });
 
