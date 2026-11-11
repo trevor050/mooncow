@@ -4,7 +4,7 @@
 //   npm run build:firefox && node e2e/firefox-smoke.mjs
 //
 // Set FIREFOX_BIN to choose the binary (defaults to /Applications/Firefox.app
-// on macOS, `firefox` on PATH elsewhere). SHOTS=dir saves screenshots.
+// on macOS, Program Files on Windows, `firefox` elsewhere). SHOTS=dir saves screenshots.
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -13,7 +13,11 @@ import puppeteer from 'puppeteer-core';
 const root = path.resolve('.output/firefox-mv3');
 const bin =
   process.env.FIREFOX_BIN ||
-  (process.platform === 'darwin' ? '/Applications/Firefox.app/Contents/MacOS/firefox' : 'firefox');
+  (process.platform === 'darwin'
+    ? '/Applications/Firefox.app/Contents/MacOS/firefox'
+    : process.platform === 'win32'
+      ? path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Mozilla Firefox', 'firefox.exe')
+      : 'firefox');
 const shots = process.env.SHOTS;
 if (shots) fs.mkdirSync(shots, { recursive: true });
 

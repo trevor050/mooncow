@@ -179,9 +179,17 @@ npm run dev:firefox    # Firefox with live reload
 npm test               # unit tests (Vitest)
 npm run typecheck
 npm run lint           # typecheck + Mozilla's add-on linter on the Firefox build
+npx playwright install chromium # once, before the Chromium end-to-end suite
 npm run test:e2e       # Playwright drives the built extension in Chromium
 npm run test:firefox   # same idea in real Firefox (or Zen: FIREFOX_BIN=/path/to/zen)
 npm run zip            # store-ready zips, plus the sources zip Firefox reviewers ask for
+```
+
+The Firefox smoke test finds a standard Firefox installation on macOS and Windows. To run it against Zen on Windows, use PowerShell:
+
+```powershell
+$env:FIREFOX_BIN = "$env:ProgramFiles\Zen Browser\zen.exe"
+npm run test:firefox
 ```
 
 The test suite covers the tool API, ranking, every tool's answers, and a table of look-alike queries where tools must stay silent ("back to the future" must not run *Go back*, "password manager reviews" must not generate a password). The end-to-end tests load the real extension and check the overlay, tab switching, the action menu, tab commands, the new tab page and AI streaming against a local mock server.
