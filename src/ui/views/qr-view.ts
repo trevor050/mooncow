@@ -5,6 +5,10 @@ import { glyph } from '../icons';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+// The library's default Byte encoder truncates UTF-16 code units to 8 bits.
+// Encode Unicode as UTF-8 so scanning reproduces the original text.
+qrcode.stringToBytes = (text: string) => Array.from(new TextEncoder().encode(text));
+
 /** Build a QR code as SVG nodes; generated locally, nothing is sent anywhere. */
 export function qrSvg(text: string, size = 220): SVGSVGElement {
   const qr = qrcode(0, 'M');
